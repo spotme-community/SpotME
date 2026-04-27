@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpotMe · Privater Chat ohne Kompromisse</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#080c10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SpotMe">
+
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:    #080c10;
+  --sur:   #0f1520;
+  --card:  #111827;
+  --bord:  rgba(255,255,255,.08);
+  --acc:   #00e5c0;
+  --p2:    #7b5cfa;
+  --p3:    #ff4f7b;
+  --text:  #e8edf5;
+  --muted: #6b7a96;
+  --green: #22d46e;
+}
+* { margin:0; padding:0; box-sizing:border-box }
+html { scroll-behavior:smooth }
+body {
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg); color:var(--text);
+  font-size:18px; line-height:1.6;
+  overflow-x:hidden;
+}
+
+/* ── NOISE TEXTURE ── */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:9999; opacity:.4;
+}
+
+/* ══ NAV ══ */
+nav {
+  position:fixed; top:0; left:0; right:0; z-index:100;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 2rem; height:68px;
+  background:rgba(8,12,16,.85); backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--bord);
+}
+.nav-brand { display:flex; align-items:center; gap:.5rem; text-decoration:none }
+.nav-dot { width:9px; height:9px; border-radius:50%; background:var(--acc); box-shadow:0 0 14px var(--acc); animation:blink 2s ease infinite }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+.nav-name { font-family:'Syne',sans-serif; font-weight:800; font-size:1.3rem; color:var(--acc); letter-spacing:-.02em }
+.nav-name b { color:var(--text) }
+.nav-links { display:flex; align-items:center; gap:2rem; list-style:none }
+.nav-links a { color:var(--muted); text-decoration:none; font-size:1rem; font-weight:500; transition:color .2s }
+.nav-links a:hover { color:var(--text) }
+.nav-cta {
+  background:var(--acc); color:var(--bg);
+  padding:.55rem 1.4rem; border-radius:10px;
+  font-weight:700; font-size:1rem; text-decoration:none;
+  transition:all .2s; white-space:nowrap;
+}
+.nav-cta:hover { box-shadow:0 0 24px rgba(0,229,192,.4); color:var(--bg) }
+
+/* ══ HERO ══ */
+.hero {
+  min-height:100vh;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  text-align:center; padding:8rem 1.5rem 5rem;
+  position:relative; overflow:hidden;
+}
+
+/* Background glow */
+.hero::after {
+  content:'';
+  position:absolute; top:30%; left:50%;
+  transform:translate(-50%,-50%);
+  width:700px; height:500px;
+  background:radial-gradient(ellipse, rgba(0,229,192,.06) 0%, rgba(123,92,250,.04) 40%, transparent 70%);
+  pointer-events:none;
+}
+
+.hero-badge {
+  display:inline-flex; align-items:center; gap:.5rem;
+  background:rgba(0,229,192,.08); border:1px solid rgba(0,229,192,.2);
+  border-radius:100px; padding:.4rem 1.1rem;
+  font-size:.9rem; font-weight:500; color:var(--acc);
+  margin-bottom:2rem; animation:fadeUp .6s ease both;
+}
+.badge-dot { width:7px; height:7px; border-radius:50%; background:var(--acc); animation:blink 1.5s ease infinite }
+
+.hero h1 {
+  font-family:'Syne',sans-serif; font-weight:800;
+  font-size:clamp(2.8rem, 6vw, 5.5rem);
+  letter-spacing:-.04em; line-height:1.0;
+  margin-bottom:1.5rem;
+  animation:fadeUp .6s ease .1s both;
+}
+.hero h1 .acc  { color:var(--acc) }
+.hero h1 .acc2 { color:var(--p2) }
+
+.hero-sub {
+  font-size:clamp(1rem, 2vw, 1.3rem); color:var(--muted);
+  font-weight:300; max-width:600px; margin:0 auto 3rem;
+  line-height:1.7; animation:fadeUp .6s ease .2s both;
+}
+
+.hero-actions {
+  display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;
+  animation:fadeUp .6s ease .3s both;
+}
+.btn-hero {
+  display:inline-flex; align-items:center; gap:.6rem;
+  padding:.9rem 2rem; border-radius:14px; font-family:'DM Sans',sans-serif;
+  font-size:1.05rem; font-weight:600; text-decoration:none; transition:all .2s;
+}
+.btn-primary { background:var(--acc); color:var(--bg) }
+.btn-primary:hover { box-shadow:0 0 32px rgba(0,229,192,.4); transform:translateY(-1px) }
+.btn-ghost { background:transparent; color:var(--text); border:1px solid var(--bord) }
+.btn-ghost:hover { border-color:rgba(255,255,255,.2); background:rgba(255,255,255,.04) }
+
+/* ── Hero Stats ── */
+.hero-stats {
+  display:flex; gap:3rem; justify-content:center;
+  margin-top:4rem; padding-top:3rem;
+  border-top:1px solid var(--bord);
+  animation:fadeUp .6s ease .4s both;
+  flex-wrap:wrap;
+}
+.stat-num { font-family:'Syne',sans-serif; font-weight:800; font-size:2.2rem; color:var(--text); letter-spacing:-.02em }
+.stat-num span { color:var(--acc) }
+.stat-label { font-size:.9rem; color:var(--muted); margin-top:.2rem }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:none} }
+
+/* ── Chat Preview Mockup ── */
+.mockup-wrap {
+  width:100%; max-width:340px; margin:3.5rem auto 0;
+  animation:fadeUp .6s ease .35s both;
+}
+.mockup {
+  background:var(--card); border:1px solid var(--bord);
+  border-radius:24px; overflow:hidden;
+  box-shadow:0 40px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(0,229,192,.06);
+}
+.mock-bar {
+  display:flex; align-items:center; gap:.7rem;
+  padding:.9rem 1.1rem; border-bottom:1px solid var(--bord);
+  background:rgba(255,255,255,.02);
+}
+.mock-av { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--p2),var(--p3)); display:flex; align-items:center; justify-content:center; font-size:.85rem; position:relative; flex-shrink:0 }
+.mock-av::after { content:''; position:absolute; bottom:1px; right:1px; width:9px; height:9px; border-radius:50%; background:var(--green); border:2px solid var(--card) }
+.mock-name { font-weight:600; font-size:.95rem }
+.mock-status { font-size:.75rem; color:var(--green) }
+.mock-lock { font-size:.75rem; color:var(--acc); margin-left:auto; background:rgba(0,229,192,.08); padding:.2rem .55rem; border-radius:100px; border:1px solid rgba(0,229,192,.2) }
+.mock-msgs { padding:1rem; display:flex; flex-direction:column; gap:.55rem }
+.mock-msg { padding:.6rem .9rem; border-radius:16px; font-size:.9rem; max-width:80%; line-height:1.45 }
+.mock-in { background:var(--sur); border:1px solid var(--bord); border-radius:4px 16px 16px 16px; align-self:flex-start }
+.mock-out { background:var(--acc); color:var(--bg); font-weight:500; border-radius:16px 4px 16px 16px; align-self:flex-end }
+.mock-time { font-size:.65rem; opacity:.6; text-align:right; margin-top:.25rem }
+.mock-inp { display:flex; align-items:center; gap:.5rem; padding:.75rem 1rem; border-top:1px solid var(--bord); background:rgba(255,255,255,.01) }
+.mock-field { flex:1; background:var(--sur); border:1px solid var(--bord); border-radius:10px; padding:.5rem .8rem; font-size:.85rem; color:var(--muted) }
+.mock-send { width:34px; height:34px; border-radius:9px; background:var(--acc); display:flex; align-items:center; justify-content:center; font-size:.85rem; flex-shrink:0 }
+
+/* ══ HOW IT WORKS ══ */
+section { padding:6rem 1.5rem }
+.container { max-width:1080px; margin:0 auto }
+
+.section-tag { font-size:.8rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--acc); margin-bottom:1rem }
+.section-title { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(2rem, 4vw, 3rem); letter-spacing:-.03em; line-height:1.1; margin-bottom:1.25rem }
+.section-sub { font-size:1.1rem; color:var(--muted); max-width:560px; font-weight:300; line-height:1.7 }
+
+/* Steps */
+.steps-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:1.5rem; margin-top:3.5rem }
+.step-card {
+  background:var(--card); border:1px solid var(--bord);
+  border-radius:20px; padding:2rem; position:relative;
+  transition:border-color .3s, transform .3s;
+}
+.step-card:hover { border-color:rgba(0,229,192,.2); transform:translateY(-3px) }
+.step-num {
+  font-family:'Syne',sans-serif; font-weight:800; font-size:3.5rem;
+  color:rgba(0,229,192,.1); position:absolute; top:1.2rem; right:1.5rem;
+  line-height:1;
+}
+.step-icon { font-size:2rem; margin-bottom:1rem }
+.step-title { font-family:'Syne',sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:.5rem }
+.step-desc { font-size:.95rem; color:var(--muted); line-height:1.6 }
+
+/* ══ FEATURES ══ */
+.features-section { background:var(--sur); border-top:1px solid var(--bord); border-bottom:1px solid var(--bord) }
+.features-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1.5rem; margin-top:3.5rem }
+.feat-card {
+  background:var(--card); border:1px solid var(--bord);
+  border-radius:20px; padding:2rem;
+  position:relative; overflow:hidden;
+  transition:all .3s;
+}
+.feat-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  border-radius:2px 2px 0 0; opacity:0; transition:opacity .3s;
+}
+.feat-card:hover { transform:translateY(-3px) }
+.feat-card:hover::before { opacity:1 }
+.fc-cyan::before  { background:linear-gradient(90deg,var(--acc),var(--p2)) }
+.fc-purple::before{ background:linear-gradient(90deg,var(--p2),var(--p3)) }
+.fc-pink::before  { background:linear-gradient(90deg,var(--p3),var(--acc)) }
+.feat-icon {
+  width:52px; height:52px; border-radius:14px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.5rem; margin-bottom:1.25rem;
+}
+.fc-cyan  .feat-icon { background:rgba(0,229,192,.1) }
+.fc-purple .feat-icon { background:rgba(123,92,250,.1) }
+.fc-pink  .feat-icon { background:rgba(255,79,123,.1) }
+.feat-title { font-family:'Syne',sans-serif; font-weight:700; font-size:1.15rem; margin-bottom:.6rem }
+.feat-desc { font-size:.95rem; color:var(--muted); line-height:1.65 }
+.feat-badge {
+  display:inline-block; margin-top:1rem;
+  font-size:.78rem; font-weight:600; padding:.28rem .7rem;
+  border-radius:100px; background:rgba(255,255,255,.05); color:var(--muted);
+  border:1px solid var(--bord);
+}
+
+/* ══ PRIVACY SECTION ══ */
+.privacy-grid { display:grid; grid-template-columns:1fr 1fr; gap:4rem; align-items:center; margin-top:3rem }
+.privacy-item { display:flex; align-items:flex-start; gap:1rem; margin-bottom:2rem }
+.privacy-check { width:28px; height:28px; border-radius:8px; background:rgba(0,229,192,.1); border:1px solid rgba(0,229,192,.25); display:flex; align-items:center; justify-content:center; color:var(--acc); font-size:1rem; flex-shrink:0; margin-top:.1rem }
+.privacy-text b { font-size:1rem; font-weight:600; display:block; margin-bottom:.2rem }
+.privacy-text p { font-size:.9rem; color:var(--muted) }
+
+/* Security visual */
+.security-box {
+  background:var(--card); border:1px solid var(--bord);
+  border-radius:20px; padding:2rem;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);
+}
+.sec-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:.9rem 1rem; border-radius:12px; background:rgba(255,255,255,.03);
+  border:1px solid var(--bord); margin-bottom:.75rem; font-size:.95rem;
+}
+.sec-row:last-child { margin-bottom:0 }
+.sec-label { color:var(--muted) }
+.sec-val { font-weight:600; color:var(--green); display:flex; align-items:center; gap:.4rem }
+.sec-val.warn { color:#f5a623 }
+.sec-dot { width:7px; height:7px; border-radius:50%; background:currentColor }
+
+/* ══ CTA SECTION ══ */
+.cta-section {
+  text-align:center; padding:8rem 1.5rem;
+  position:relative; overflow:hidden;
+}
+.cta-section::before {
+  content:''; position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:600px; height:400px;
+  background:radial-gradient(ellipse, rgba(0,229,192,.07) 0%, transparent 70%);
+  pointer-events:none;
+}
+.cta-section h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(2.2rem,4vw,3.5rem); letter-spacing:-.03em; line-height:1.1; margin-bottom:1.25rem }
+.cta-section p { font-size:1.1rem; color:var(--muted); max-width:480px; margin:0 auto 2.5rem; font-weight:300 }
+
+/* ══ FOOTER ══ */
+footer {
+  padding:3rem 2rem 4rem; border-top:1px solid var(--bord);
+  display:flex; justify-content:space-between; align-items:center;
+  flex-wrap:wrap; gap:1.5rem; max-width:1080px; margin:0 auto;
+}
+.foot-brand { font-family:'Syne',sans-serif; font-weight:800; font-size:1.1rem; color:var(--acc) }
+.foot-brand b { color:var(--text) }
+.foot-links { display:flex; gap:2rem; list-style:none }
+.foot-links a { color:var(--muted); text-decoration:none; font-size:.9rem; transition:color .2s }
+.foot-links a:hover { color:var(--text) }
+.foot-legal { font-size:.85rem; color:var(--muted) }
+
+/* ══ RESPONSIVE ══ */
+@media(max-width:768px){
+  nav { padding:0 1rem }
+  .nav-links { display:none }
+  .privacy-grid { grid-template-columns:1fr }
+  .hero-stats { gap:2rem }
+  footer { flex-direction:column; text-align:center }
+  .foot-links { justify-content:center }
+}
+
+/* Divider line */
+.divider { height:1px; background:var(--bord); margin:0 }
+
+/* Scroll animation */
+.reveal { opacity:0; transform:translateY(24px); transition:all .6s ease }
+.reveal.visible { opacity:1; transform:none }
+</style>
+</head>
+<body>
+
+<!-- ══ NAV ══ -->
+<nav>
+  <a href="#" class="nav-brand">
+    <div class="nav-dot"></div>
+    <span class="nav-name">Spot<b>Me</b></span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how">So funktioniert's</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#spots">Spots</a></li>
+    <li><a href="#privacy">Datenschutz</a></li>
+  </ul>
+  <a href="index.html" class="nav-cta">Chat öffnen →</a>
+</nav>
+
+<!-- ══ HERO ══ -->
+<section class="hero">
+  <div class="hero-badge">
+    <div class="badge-dot"></div>
+    Open Source · Kein Account · Verschlüsselt · P2P
+  </div>
+
+  <h1>
+    Chat ohne<br>
+    <span class="acc">Server.</span> Ohne<br>
+    <span class="acc2">Kompromisse.</span>
+  </h1>
+
+  <p class="hero-sub">
+    SpotMe verbindet dich direkt mit deinem Gegenüber — von Gerät zu Gerät. AES-256 Verschlüsselung in der Datenbank. Keine Metadaten. Kein Bullshit.
+  </p>
+
+  <div class="hero-actions">
+    <a href="index.html" class="btn-hero btn-primary">🚀 Jetzt kostenlos chatten</a>
+    <a href="#how" class="btn-hero btn-ghost">Wie funktioniert das?</a>
+  </div>
+
+  <!-- Chat Mockup -->
+  <div class="mockup-wrap">
+    <div class="mockup">
+      <div class="mock-bar">
+        <div class="mock-av">🧑</div>
+        <div>
+          <div class="mock-name">Shadow_Wolf</div>
+          <div class="mock-status">● Online · 280m entfernt</div>
+        </div>
+        <div class="mock-lock">🔒 E2E</div>
+      </div>
+      <div class="mock-msgs">
+        <div class="mock-msg mock-in">Hey, bist du am Park? 👀</div>
+        <div class="mock-msg mock-out">Ja, bin gleich da 🙂<div class="mock-time">23:14 ✓✓</div></div>
+        <div class="mock-msg mock-in">Perfekt, ich bin beim Eingang</div>
+        <div class="mock-msg mock-out">Ok, sehen uns gleich 👌<div class="mock-time">23:15 ✓✓</div></div>
+      </div>
+      <div class="mock-inp">
+        <div class="mock-field">Nachricht...</div>
+        <div class="mock-send">➤</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-stats">
+    <div>
+      <div class="stat-num">0<span>€</span></div>
+      <div class="stat-label">Kosten für immer</div>
+    </div>
+    <div>
+      <div class="stat-num">0<span>x</span></div>
+      <div class="stat-label">Daten gesammelt</div>
+    </div>
+    <div>
+      <div class="stat-num">100<span>%</span></div>
+      <div class="stat-label">Peer-to-Peer</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ HOW IT WORKS ══ -->
+<section id="how">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-tag">So einfach geht's</div>
+      <h2 class="section-title">In 30 Sekunden verbunden</h2>
+      <p class="section-sub">Kein Download, kein Konto, keine Nummer. Einfach den Code teilen und loschatten.</p>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step-card reveal">
+        <div class="step-num">1</div>
+        <div class="step-icon">🔑</div>
+        <div class="step-title">Deinen Code teilen</div>
+        <div class="step-desc">Beim ersten Öffnen bekommst du automatisch einen persönlichen 6-stelligen Code. Den kannst du in deinem Profil oder per Link teilen.</div>
+      </div>
+      <div class="step-card reveal">
+        <div class="step-num">2</div>
+        <div class="step-icon">💬</div>
+        <div class="step-title">Code eingeben</div>
+        <div class="step-desc">Dein Gegenüber gibt deinen Code ein. Du bekommst eine Benachrichtigung und kannst den Chat annehmen oder ablehnen.</div>
+      </div>
+      <div class="step-card reveal">
+        <div class="step-num">3</div>
+        <div class="step-icon">🚀</div>
+        <div class="step-title">Direkt loschatten</div>
+        <div class="step-desc">Die Verbindung läuft direkt von Gerät zu Gerät. Kein Server liest mit — die Nachrichten bleiben nur auf euren Geräten.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ FEATURES ══ -->
+<section id="features" class="features-section">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-tag">Was SpotMe kann</div>
+      <h2 class="section-title">Alles was du brauchst.<br>Nichts was du nicht willst.</h2>
+    </div>
+
+    <div class="features-grid">
+      <div class="feat-card fc-cyan reveal">
+        <div class="feat-icon">🔒</div>
+        <div class="feat-title">Doppelte Verschlüsselung</div>
+        <div class="feat-desc">Chat-Nachrichten laufen über WebRTC DTLS — direkt von Gerät zu Gerät. Spot-Profile werden zusätzlich mit AES-256-CBC in der Datenbank verschlüsselt. Zwei Schichten, kein Kompromiss.</div>
+        <div class="feat-badge">WebRTC DTLS · AES-256</div>
+      </div>
+
+      <div class="feat-card fc-purple reveal">
+        <div class="feat-icon">📱</div>
+        <div class="feat-title">Kein Account, keine App</div>
+        <div class="feat-desc">SpotMe läuft direkt im Browser. Keine Installation, keine E-Mail, keine Telefonnummer. Einfach öffnen und chatten — auf Android, iOS und Desktop.</div>
+        <div class="feat-badge">Browser-App</div>
+      </div>
+
+      <div class="feat-card fc-pink reveal">
+        <div class="feat-icon">💾</div>
+        <div class="feat-title">Alles lokal gespeichert</div>
+        <div class="feat-desc">Dein Chatverlauf liegt auf deinem Gerät, nirgendwo sonst. Export als JSON oder lesbares Text-Transkript — du hast die volle Kontrolle.</div>
+        <div class="feat-badge">localStorage</div>
+      </div>
+
+      <div class="feat-card fc-cyan reveal">
+        <div class="feat-icon">📎</div>
+        <div class="feat-title">Bilder & Dateien</div>
+        <div class="feat-desc">Fotos, PDFs, ZIPs — direkt im Chat übertragen, bis zu 100 MB. Keine Cloud, kein Umweg über einen Server. Direkt von Handy zu Handy.</div>
+        <div class="feat-badge">P2P Transfer</div>
+      </div>
+
+      <div class="feat-card fc-purple reveal">
+        <div class="feat-icon">🔔</div>
+        <div class="feat-title">Benachrichtigungen</div>
+        <div class="feat-desc">Eingehende Chats und neue Nachrichten landen als Push-Notification auf deinem Sperrbildschirm — auch wenn der Tab im Hintergrund läuft.</div>
+        <div class="feat-badge">Web Push API</div>
+      </div>
+
+      <div class="feat-card fc-pink reveal">
+        <div class="feat-icon">📡</div>
+        <div class="feat-title">Community Spots</div>
+        <div class="feat-desc">Entdecke Menschen in deiner Nähe über den Radar. Gay, Dates, Nachbarschaftshilfe — jeder Spot ist eine eigene Community mit eigenem Profil. Kurznachrichten für den ersten Kontakt inklusive.</div>
+        <div class="feat-badge">Gay · Dates · General</div>
+      </div>
+      <div class="feat-card fc-cyan reveal">
+        <div class="feat-icon">🌐</div>
+        <div class="feat-title">Open Source</div>
+        <div class="feat-desc">Der gesamte Code liegt auf GitHub — jeder kann prüfen, was SpotMe tut und was nicht. Keine versteckten Tracker, keine Werbung, keine Monetarisierung.</div>
+        <div class="feat-badge">MIT Lizenz</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ SPOTS ══ -->
+<section id="spots">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-tag">Community entdecken</div>
+      <h2 class="section-title">Mehr als ein Messenger.<br>Eine Community.</h2>
+      <p class="section-sub">SpotMe Spots verbinden Menschen in deiner Region — diskret, anonym, ohne Pflichtfoto.</p>
+    </div>
+    <div class="features-grid" style="margin-top:3rem;">
+      <div class="feat-card fc-cyan reveal">
+        <div class="feat-icon">🏳️‍🌈</div>
+        <div class="feat-title">Gay Spot</div>
+        <div class="feat-desc">Community für die LGBTQ+ Szene. Radar zeigt wer gerade in deiner Nähe ist. Filter nach Orientierung, Rolle und mehr. Verifizierungssystem für echte Kontakte.</div>
+        <div class="feat-badge">Radar · Verifizierung · Anonym</div>
+      </div>
+      <div class="feat-card fc-pink reveal">
+        <div class="feat-icon">💕</div>
+        <div class="feat-title">Dates Spot</div>
+        <div class="feat-desc">Für alle die jemanden kennenlernen möchten — Beziehung, casual oder einfach neue Kontakte. Profil mit Beschreibung, Radar und direktem Chat-Button.</div>
+        <div class="feat-badge">Beziehung · Casual · Freundschaft</div>
+      </div>
+      <div class="feat-card fc-purple reveal">
+        <div class="feat-icon">🤝</div>
+        <div class="feat-title">General Spot</div>
+        <div class="feat-desc">Nachbarschaftshilfe neu gedacht. Einkaufen, Fahrdienst, Handwerk — wer bietet was, wer braucht was? Lokal, unkompliziert, direkt.</div>
+        <div class="feat-badge">Hilfe anbieten · Hilfe suchen</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:2.5rem;" class="reveal">
+      <a href="spot.html" class="btn-hero btn-primary" style="display:inline-flex;">📡 Spots entdecken</a>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ PRIVACY ══ -->
+<section id="privacy">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-tag">Datenschutz</div>
+      <h2 class="section-title">Was SpotMe weiß:<br>Nichts.</h2>
+      <p class="section-sub">Kein Konto bedeutet keine Daten. Die Verbindung läuft peer-to-peer — der Signaling-Server sieht nur dass zwei Codes miteinander sprechen wollen, nie den Inhalt.</p>
+    </div>
+
+    <div class="privacy-grid">
+      <div class="reveal">
+        <div class="privacy-item">
+          <div class="privacy-check">✓</div>
+          <div class="privacy-text">
+            <b>Keine Telefonnummer</b>
+            <p>Deine Handynummer bleibt privat. Du meldest dich mit einem zufälligen Code an.</p>
+          </div>
+        </div>
+        <div class="privacy-item">
+          <div class="privacy-check">✓</div>
+          <div class="privacy-text">
+            <b>Keine E-Mail-Adresse</b>
+            <p>Kein Konto, kein Registrierungsprozess, keine Bestätigungsmail.</p>
+          </div>
+        </div>
+        <div class="privacy-item">
+          <div class="privacy-check">✓</div>
+          <div class="privacy-text">
+            <b>Keine Nachrichtenspeicherung</b>
+            <p>Deine Nachrichten verlassen nie dein Gerät in gespeicherter Form. Kein Cloud-Backup auf fremden Servern.</p>
+          </div>
+        </div>
+        <div class="privacy-item">
+          <div class="privacy-check">✓</div>
+          <div class="privacy-text">
+            <b>Keine Werbung</b>
+            <p>SpotMe ist und bleibt werbefrei. Kein Tracking, kein Profiling, keine personalisierten Inhalte.</p>
+          </div>
+        </div>
+        <div class="privacy-item">
+          <div class="privacy-check">✓</div>
+          <div class="privacy-text">
+            <b>AES-256 Datenbank-Verschlüsselung</b>
+            <p>Spot-Profildaten wie Name, Bio und Orientierung werden vor dem Speichern verschlüsselt. Selbst ein Datenbankzugriff enthüllt keine persönlichen Infos.</p>
+          </div>
+        </div>
+        <div class="privacy-item">
+          <div class="privacy-check">✓</div>
+          <div class="privacy-text">
+            <b>DSGVO-konform</b>
+            <p>Was wir nicht haben, können wir nicht hergeben. Das ist echter Datenschutz — nicht auf dem Papier.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="security-box reveal">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;margin-bottom:1.25rem">Sicherheits-Übersicht</div>
+        <div class="sec-row">
+          <span class="sec-label">Transport</span>
+          <span class="sec-val"><div class="sec-dot"></div>WebRTC DTLS</span>
+        </div>
+        <div class="sec-row">
+          <span class="sec-label">P2P Verbindung</span>
+          <span class="sec-val"><div class="sec-dot"></div>Direkt, kein Proxy</span>
+        </div>
+        <div class="sec-row">
+          <span class="sec-label">Nachrichten-Server</span>
+          <span class="sec-val"><div class="sec-dot"></div>Kein Server</span>
+        </div>
+        <div class="sec-row">
+          <span class="sec-label">Lokale Speicherung</span>
+          <span class="sec-val"><div class="sec-dot"></div>AES-256 verschlüsselt</span>
+        </div>
+        <div class="sec-row">
+          <span class="sec-label">Signaling</span>
+          <span class="sec-val warn"><div class="sec-dot"></div>Code + IP (kein Inhalt)</span>
+        </div>
+        <div class="sec-row">
+          <span class="sec-label">Quellcode</span>
+          <span class="sec-val"><div class="sec-dot"></div>Open Source</span>
+        </div>
+        <p style="font-size:.82rem;color:var(--muted);margin-top:1rem;line-height:1.5">
+          Gelb markierte Punkte sind bekannte und bewusste Kompromisse, die wir transparent kommunizieren.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ══ CTA ══ -->
+<section class="cta-section">
+  <div class="reveal">
+    <h2>Bereit zu chatten?<br>Einfach loslegen.</h2>
+    <p>Keine App, kein Download, kein Konto. Dein Browser reicht aus.</p>
+    <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+      <a href="index.html" class="btn-hero btn-primary" style="font-size:1.1rem;padding:1rem 2.5rem">
+        🚀 Chat starten — kostenlos
+      </a>
+    </div>
+    <p style="margin-top:1.5rem;font-size:.9rem;color:var(--muted)">
+      Läuft auf Chrome, Firefox, Safari · iOS & Android · Desktop
+    </p>
+  </div>
+</section>
+
+<!-- ══ FOOTER ══ -->
+<div class="divider"></div>
+<footer>
+  <div>
+    <div class="foot-brand">Spot<b>Me</b></div>
+    <div style="font-size:.85rem;color:var(--muted);margin-top:.3rem">Privater Chat ohne Kompromisse</div>
+  </div>
+  <ul class="foot-links">
+    <li><a href="https://github.com/snailsstons/SpotMe-Chat">GitHub</a></li>
+    <li><a href="#">Datenschutz</a></li>
+    <li><a href="#">Impressum</a></li>
+  </ul>
+  <div class="foot-legal">© 2026 SpotMe · MIT Lizenz · Open Source</div>
+</footer>
+
+<script>
+// Scroll-Animation für .reveal Elemente
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
