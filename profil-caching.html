@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SpotMe · SpotCache Profil</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#060a0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #060a0f;
+  --sur:     #0c1219;
+  --card:    #101820;
+  --card2:   #141f2e;
+  --bord:    rgba(255,255,255,.08);
+  --bord2:   rgba(255,255,255,.13);
+  --acc:     #ff9a00;
+  --acc-dim: rgba(255,154,0,.10);
+  --p2:      #00e5c0;
+  --p3:      #ff4f7b;
+  --text:    #dde4f0;
+  --muted:   #4e6070;
+  --muted2:  #7a8fa8;
+  --green:   #1ecc68;
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent }
+html, body { min-height:100%; background:var(--bg); color:var(--text); font-family:'DM Sans', sans-serif; font-size:17px; line-height:1.5; }
+.page { max-width:480px; margin:0 auto; padding:1.5rem 1.25rem 6rem; }
+
+/* Brand */
+.brand { display:flex; align-items:center; gap:.55rem; margin-bottom:2rem; }
+.bdot { width:9px; height:9px; border-radius:50%; background:var(--acc); box-shadow:0 0 14px var(--acc); animation:blink 2.2s ease infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+.bname { font-family:'Syne',sans-serif; font-weight:800; font-size:1.3rem; color:var(--acc); letter-spacing:-.02em }
+.bname b { color:var(--text) }
+.btag { font-size:.78rem; color:var(--muted2); margin-left:.3rem }
+
+/* Avatar */
+.avatar-wrap { display:flex; flex-direction:column; align-items:center; gap:.9rem; margin-bottom:2rem; }
+.avatar { width:96px; height:96px; border-radius:50%; background:linear-gradient(135deg,var(--acc),var(--p2)); display:flex; align-items:center; justify-content:center; font-size:2.6rem; border:2px solid var(--bord2); cursor:pointer; overflow:hidden; }
+.avatar img { width:100%; height:100%; object-fit:cover; border-radius:50% }
+.avatar-hint { font-size:.8rem; color:var(--muted2) }
+.avatar-btns { display:flex; gap:.6rem }
+.av-btn { padding:.38rem .9rem; border-radius:100px; border:1px solid var(--bord2); background:transparent; color:var(--muted2); font-size:.78rem; cursor:pointer; }
+
+/* Form */
+.sec-label { font-size:.7rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:.8rem; margin-top:1.75rem; }
+.sec-label:first-of-type { margin-top:0 }
+.field { margin-bottom:1rem }
+.field label { display:block; font-size:.8rem; font-weight:500; color:var(--muted2); margin-bottom:.4rem; }
+.field label span { color:var(--p3); margin-left:.2rem }
+.finp { width:100%; padding:.7rem 1rem; background:var(--sur); border:1.5px solid var(--bord); border-radius:13px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:.95rem; outline:none; }
+.finp:focus { border-color:rgba(255,154,0,.4) }
+.finp[readonly] { opacity:.55; cursor:not-allowed }
+select.finp { cursor:pointer }
+select.finp option { background:var(--card); color:var(--text) }
+
+/* Anzeigentext */
+.anzeige-wrap { position:relative; }
+textarea.finp-anzeige {
+  width:100%; padding:1rem 1.1rem;
+  background:var(--card2);
+  border:1.5px solid rgba(255,154,0,.3);
+  border-radius:16px;
+  color:var(--text); font-family:'DM Sans',sans-serif;
+  font-size:1rem; line-height:1.6;
+  outline:none; resize:none; min-height:140px;
+}
+textarea.finp-anzeige:focus { border-color:var(--acc); }
+.char-count { font-size:.7rem; color:var(--muted); text-align:right; margin-top:.3rem }
+.char-count.warn { color:var(--p3) }
+
+/* Tag-Hinweis */
+.tag-hint { font-size:.7rem; color:var(--muted); margin-bottom:.5rem; }
+
+/* Standort */
+.spot-row { display:grid; grid-template-columns:1fr 1fr; gap:.6rem }
+
+/* Save Bar */
+.save-bar { position:fixed; bottom:0; left:0; right:0; padding:.85rem 1.25rem; background:rgba(6,10,15,.95); backdrop-filter:blur(20px); border-top:1px solid var(--bord); z-index:100; }
+.save-bar-inner { max-width:480px; margin:0 auto; display:flex; align-items:center; gap:.75rem; }
+.btn-save { flex:1; padding:.9rem; background:var(--acc); color:#fff; border:none; border-radius:14px; font-weight:700; font-size:1rem; cursor:pointer; }
+.btn-back { padding:.9rem 1.1rem; background:var(--card); color:var(--muted2); border:1px solid var(--bord); border-radius:14px; font-size:.9rem; cursor:pointer; }
+
+.back-link { display:inline-flex; align-items:center; gap:.4rem; color:var(--muted2); font-size:.85rem; cursor:pointer; margin-bottom:1.5rem; }
+.saved-badge { display:none; align-items:center; gap:.4rem; font-size:.8rem; color:var(--green); padding:.3rem .8rem; border-radius:100px; background:rgba(30,204,104,.1); border:1px solid rgba(30,204,104,.25); }
+.saved-badge.show { display:flex }
+.toast { position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%); background:var(--sur); border:1px solid var(--bord2); border-radius:100px; padding:.5rem 1.2rem; font-size:.82rem; z-index:999; opacity:0; transition:all .3s; pointer-events:none; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(-10px); }
+.readonly-hint { font-size:.72rem; color:var(--muted); margin-top:.3rem; display:none; }
+.info-box { background:var(--card); border:1px solid rgba(255,154,0,.2); border-radius:14px; padding:1rem 1.1rem; font-size:.88rem; color:var(--muted2); margin-bottom:1.5rem; line-height:1.6; }
+.info-box strong { color:var(--text) }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Brand -->
+  <div class="brand">
+    <div class="bdot"></div>
+    <div class="bname">Spot<b>Me</b> <span class="btag">· SpotCache</span></div>
+    <div class="saved-badge" id="saved-badge">✓ Gespeichert</div>
+  </div>
+
+  <!-- Back -->
+  <div class="back-link" onclick="goBack()">‹ Zurück zum SpotCaching</div>
+
+  <!-- Info -->
+  <div class="info-box">
+    <strong>🧭 SpotCache Profil</strong><br>
+    Deine Wünsche und Angebote helfen, geheime Treffpunkte in deiner Nähe zu entsperren. Je mehr du teilst, desto mehr Matches.
+  </div>
+
+  <!-- Avatar -->
+  <div class="avatar-wrap">
+    <div class="avatar" id="avatar-el" onclick="document.getElementById('avatar-input').click()">🧭</div>
+    <div class="avatar-hint" id="avatar-status">Tippe zum Ändern</div>
+    <div class="avatar-btns">
+      <button class="av-btn" onclick="document.getElementById('avatar-input').click()">📷 Foto wählen</button>
+      <button class="av-btn" onclick="clearAvatar()">✕ Entfernen</button>
+    </div>
+    <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="handleAvatar(this)">
+  </div>
+
+  <!-- WÜNSCHE -->
+  <div class="sec-label">Meine Wünsche <span style="color:var(--p3)">*</span></div>
+  <div class="field">
+    <div class="anzeige-wrap">
+      <textarea class="finp-anzeige" id="f-wishes"
+        placeholder="Was wünschst du dir? Z.B. Kaffee trinken, Strandspaziergang, Kino, Wandern, Fahrrad fahren …"
+        maxlength="300"
+        oninput="updateCharCount('f-wishes','wish-count',300); autoSave()"></textarea>
+    </div>
+    <div class="tag-hint">Mehrere Wünsche mit Komma trennen – aus diesen werden deine Spots</div>
+    <div class="char-count" id="wish-count">0 / 300</div>
+  </div>
+
+  <!-- ANGEBOTE -->
+  <div class="sec-label">Was ich biete <span style="color:var(--p3)">*</span></div>
+  <div class="field">
+    <div class="anzeige-wrap">
+      <textarea class="finp-anzeige" id="f-offers"
+        placeholder="Das bringst du mit: Kochkünste, Humor, gute Gespräche, sportliche Aktivitäten …"
+        maxlength="300"
+        oninput="updateCharCount('f-offers','offer-count',300); autoSave()"></textarea>
+    </div>
+    <div class="tag-hint">Mehrere Angebote mit Komma trennen</div>
+    <div class="char-count" id="offer-count">0 / 300</div>
+  </div>
+
+  <!-- ÜBER MICH -->
+  <div class="sec-label">Über mich</div>
+  <div class="field">
+    <div class="anzeige-wrap">
+      <textarea class="finp-anzeige" id="f-bio"
+        placeholder="Ein paar Worte zu deiner Person …"
+        maxlength="400"
+        oninput="updateCharCount('f-bio','bio-count',400); autoSave()"></textarea>
+    </div>
+    <div class="char-count" id="bio-count">0 / 400</div>
+  </div>
+
+  <!-- PFLICHTDATEN -->
+  <div class="sec-label">Zur Person</div>
+
+  <div class="field">
+    <label>Anzeigename <span>*</span></label>
+    <input type="text" id="f-name" class="finp" placeholder="Wie sollen andere dich nennen?" maxlength="40" oninput="autoSave()">
+  </div>
+
+  <div class="field">
+    <label>Geburtsjahr <span style="color:var(--muted2);font-weight:400;">(optional)</span></label>
+    <input type="number" id="f-year" class="finp" placeholder="z.B. 1985" min="1940" max="2007" oninput="updateAge();autoSave()">
+    <div id="year-hint" class="readonly-hint">Geburtsjahr kann nicht mehr geändert werden.</div>
+    <div id="age-display" style="font-size:.8rem;color:var(--muted2);margin-top:.3rem;"></div>
+  </div>
+
+  <!-- STANDORT -->
+  <div class="sec-label">Standort <span style="color:var(--p3)">*</span></div>
+
+  <div class="field">
+    <label>Region</label>
+    <select id="f-region" class="finp" onchange="fillProvince();autoSave()">
+      <option value="">Region wählen…</option>
+    </select>
+  </div>
+
+  <div class="spot-row">
+    <div class="field">
+      <label>Provinz</label>
+      <select id="f-province" class="finp" onchange="fillCity();autoSave()">
+        <option value="">Provinz…</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Stadt</label>
+      <select id="f-city" class="finp" onchange="autoSave()">
+        <option value="">Stadt…</option>
+      </select>
+    </div>
+  </div>
+
+</div>
+
+<!-- Save Bar -->
+<div class="save-bar">
+  <div class="save-bar-inner">
+    <button class="btn-back" onclick="goBack()">‹ Zurück</button>
+    <button class="btn-save" onclick="saveProfile()">💾 Speichern</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+const SPOT        = 'caching';
+const PROFILE_KEY = 'sm_profile_caching';
+const API_BASE    = 'https://spotme-chat-obom.onrender.com/api';
+
+// Geo-Daten (identisch zu profil-dates)
+const GEO = {
+  "Andalusien":{"Almería":["Mojácar","Carboneras","Las Negras","Almería","Roquetas de Mar","Adra"],"Cádiz":["San Roque","La Línea de la Concepción","Algeciras","Tarifa","Barbate","Conil de la Frontera","Chiclana de la Frontera","Cádiz","El Puerto de Santa María","Rota","Chipiona","Sanlúcar de Barrameda"],"Córdoba":["Córdoba","Lucena","Puente Genil"],"Granada":["Motril","Salobreña","Almuñécar"],"Huelva":["Matalascañas","Mazagón","Huelva","Punta Umbría","Isla Cristina","Ayamonte"],"Jaén":["Jaén","Linares","Úbeda","Baeza"],"Málaga":["Nerja","Torrox","Torre del Mar","Málaga","Torremolinos","Benalmádena","Fuengirola","Marbella","Estepona"],"Sevilla":["Sevilla","Dos Hermanas","Écija"]},
+  "Aragón":{"Huesca":["Huesca","Barbastro","Jaca"],"Teruel":["Teruel","Alcañiz"],"Zaragoza":["Zaragoza","Calatayud","Ejea de los Caballeros"]},
+  "Asturien":{"Asturien":["Navia","Luarca","Cudillero","Avilés","Gijón","Villaviciosa","Ribadesella","Llanes"]},
+  "Balearen":{"Balearen":["Palma","Alcúdia","Mahón","Ciutadella","Ibiza Stadt","Sant Antoni de Portmany"]},
+  "Baskenland":{"Álava":["Vitoria-Gasteiz","Llodio"],"Biskaya":["Muskiz","Getxo","Bermeo","Lekeitio","Ondarroa"],"Gipuzkoa":["Zarautz","San Sebastián","Pasaia","Hondarribia"]},
+  "Extremadura":{"Badajoz":["Badajoz","Mérida","Don Benito"],"Cáceres":["Cáceres","Plasencia","Trujillo"]},
+  "Galicien":{"A Coruña":["Ribeira","Muros","Fisterra","Muxía","A Coruña","Ferrol","Cedeira"],"Lugo":["Viveiro","Burela","Ribadeo"],"Ourense":["Ourense","Verín"],"Pontevedra":["A Guarda","Baiona","Vigo","Cangas","Pontevedra","Sanxenxo","Vilagarcía de Arousa"]},
+  "Kanaren":{"Las Palmas":["Las Palmas de Gran Canaria","Maspalomas","Arrecife","Puerto del Rosario"],"Santa Cruz de Tenerife":["Santa Cruz de Tenerife","Puerto de la Cruz","Los Cristianos","San Sebastián de La Gomera","Santa Cruz de La Palma","Valverde"]},
+  "Kantabrien":{"Kantabrien":["San Vicente de la Barquera","Comillas","Suances","Santander","Santoña","Laredo","Castro Urdiales"]},
+  "Kastilien-La Mancha":{"Albacete":["Albacete","Hellín"],"Ciudad Real":["Ciudad Real","Puertollano","Valdepeñas"],"Cuenca":["Cuenca","Tarancón"],"Guadalajara":["Guadalajara","Sigüenza"],"Toledo":["Toledo","Talavera de la Reina"]},
+  "Kastilien-León":{"Ávila":["Ávila","Arévalo"],"Burgos":["Burgos","Aranda de Duero","Miranda de Ebro"],"León":["León","Ponferrada","Astorga"],"Palencia":["Palencia","Aguilar de Campoo"],"Salamanca":["Salamanca","Béjar","Ciudad Rodrigo"],"Segovia":["Segovia","Cuéllar"],"Soria":["Soria","El Burgo de Osma"],"Valladolid":["Valladolid","Medina del Campo","Tordesillas"],"Zamora":["Zamora","Benavente"]},
+  "Katalonien":{"Barcelona":["Mataró","Badalona","Barcelona","Castelldefels","Sitges","Vilanova i la Geltrú"],"Girona":["Roses","Palamós","Sant Feliu de Guíxols","Lloret de Mar","Blanes"],"Tarragona":["Calafell","Torredembarra","Tarragona","Salou","Cambrils","L'Ametlla de Mar","Sant Carles de la Ràpita"]},
+  "La Rioja":{"La Rioja":["Logroño","Calahorra","Haro"]},
+  "Madrid":{"Madrid":["Madrid","Alcalá de Henares","Getafe","Móstoles","Aranjuez"]},
+  "Murcia":{"Murcia":["San Pedro del Pinatar","San Javier","Cartagena","Mazarrón","Águilas"]},
+  "Navarra":{"Navarra":["Pamplona","Tudela","Estella-Lizarra"]},
+  "Valencia (Region)":{"Alicante":["Denia","Jávea","Calpe","Altea","Benidorm","Villajoyosa","Alicante","Santa Pola","Torrevieja"],"Castellón":["Vinaròs","Peñíscola","Alcossebre","Oropesa del Mar","Benicàssim","Castellón de la Plana"],"Valencia":["Sagunto","Valencia","Cullera","Gandía","Oliva"]}
+};
+
+let avatarData = null;
+let saveTimer  = null;
+
+// ── Region/Provinz/Stadt ──────────────────────────────────────────────────
+function fillRegions() {
+  const sel = document.getElementById('f-region');
+  Object.keys(GEO).forEach(r => {
+    const o = document.createElement('option');
+    o.value = o.textContent = r;
+    sel.appendChild(o);
+  });
+}
+function fillProvince() {
+  const region = document.getElementById('f-region').value;
+  const pSel   = document.getElementById('f-province');
+  const cSel   = document.getElementById('f-city');
+  pSel.innerHTML = '<option value="">Provinz…</option>';
+  cSel.innerHTML = '<option value="">Stadt…</option>';
+  if (!region || !GEO[region]) return;
+  Object.keys(GEO[region]).forEach(p => {
+    const o = document.createElement('option');
+    o.value = o.textContent = p;
+    pSel.appendChild(o);
+  });
+}
+function fillCity() {
+  const region   = document.getElementById('f-region').value;
+  const province = document.getElementById('f-province').value;
+  const cSel     = document.getElementById('f-city');
+  cSel.innerHTML = '<option value="">Stadt…</option>';
+  if (!region || !province || !GEO[region]?.[province]) return;
+  GEO[region][province].forEach(c => {
+    const o = document.createElement('option');
+    o.value = o.textContent = c;
+    cSel.appendChild(o);
+  });
+}
+
+// ── Char-Count ─────────────────────────────────────────────────────────────
+function updateCharCount(inputId, countId, maxLen) {
+  const input = document.getElementById(inputId);
+  const count = document.getElementById(countId);
+  if (input && count) {
+    const len = input.value.length;
+    count.textContent = `${len} / ${maxLen}`;
+    count.classList.toggle('warn', len > maxLen * 0.85);
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function updateAge() {
+  const y = parseInt(document.getElementById('f-year').value);
+  const d = document.getElementById('age-display');
+  if (!y || y < 1940 || y > 2007) { d.textContent = ''; return; }
+  d.textContent = `(${new Date().getFullYear() - y} Jahre)`;
+}
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+function showSavedBadge() {
+  const b = document.getElementById('saved-badge');
+  b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), 2500);
+}
+function goBack() {
+  window.location.href = 'spot-caching.html';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// AVATAR
+// ══════════════════════════════════════════════════════════════════════════
+function handleAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 1 * 1024 * 1024) { toast('⚠️ Max. 1 MB'); return; }
+  const statusEl = document.getElementById('avatar-status');
+  if (statusEl) statusEl.textContent = '⏳ Komprimiere…';
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxW = 600;
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = h * maxW / w; w = maxW; }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      avatarData = canvas.toDataURL('image/jpeg', 0.55);
+      renderAvatar();
+      if (statusEl) statusEl.textContent = '⏳ Speichere auf Server…';
+      uploadAvatarToServer();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadAvatarToServer() {
+  const token = localStorage.getItem('sm_token');
+  const code  = localStorage.getItem('sm_code');
+  const statusEl = document.getElementById('avatar-status');
+  autoSave();
+  if (!token || !code || !avatarData) {
+    if (statusEl) statusEl.textContent = '⚠️ Kein Token – nur lokal gespeichert';
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/avatar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, token, avatar: avatarData, spot: SPOT })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (statusEl) statusEl.textContent = '✅ Auf Server gespeichert';
+      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    } else {
+      if (statusEl) statusEl.textContent = '⚠️ ' + (data.error || 'Server abgelehnt');
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '⚠️ Server nicht erreichbar – nur lokal';
+  }
+}
+
+async function loadAvatarFromServer() {
+  const code = localStorage.getItem('sm_code');
+  if (!code) return;
+  try {
+    const res = await fetch(`${API_BASE}/avatar/${code}?spot=${SPOT}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.avatar) { avatarData = data.avatar; renderAvatar(); autoSave(); }
+  } catch (e) {}
+}
+
+async function clearAvatarFromServer() {
+  const token = localStorage.getItem('sm_token');
+  const code  = localStorage.getItem('sm_code');
+  if (token && code) {
+    try {
+      await fetch(`${API_BASE}/avatar/${code}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, spot: SPOT })
+      });
+    } catch (e) {}
+  }
+}
+
+function renderAvatar() {
+  const el = document.getElementById('avatar-el');
+  if (avatarData) el.innerHTML = `<img src="${avatarData}" alt="Avatar">`;
+  else el.textContent = '🧭';
+}
+
+async function clearAvatar() {
+  const statusEl = document.getElementById('avatar-status');
+  avatarData = null;
+  renderAvatar();
+  await clearAvatarFromServer();
+  autoSave();
+  if (statusEl) statusEl.textContent = '✅ Gelöscht';
+  setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PROFIL LADEN & SPEICHERN
+// ══════════════════════════════════════════════════════════════════════════
+function loadProfile() {
+  const raw = localStorage.getItem(PROFILE_KEY);
+  if (!raw) return;
+  try {
+    const p = JSON.parse(raw);
+    if (p.name)   document.getElementById('f-name').value = p.name;
+    if (p.bio)    { document.getElementById('f-bio').value = p.bio; updateCharCount('f-bio','bio-count',400); }
+    if (p.wishes) document.getElementById('f-wishes').value = (Array.isArray(p.wishes) ? p.wishes.join(', ') : p.wishes);
+    if (p.offers) document.getElementById('f-offers').value = (Array.isArray(p.offers) ? p.offers.join(', ') : p.offers);
+    if (p.year) {
+      const yf = document.getElementById('f-year');
+      yf.value   = p.year;
+      yf.readOnly = true;
+      document.getElementById('year-hint').style.display = 'block';
+      updateAge();
+    }
+    if (p.region) {
+      document.getElementById('f-region').value = p.region;
+      fillProvince();
+      if (p.province) {
+        document.getElementById('f-province').value = p.province;
+        fillCity();
+        if (p.city) document.getElementById('f-city').value = p.city;
+      }
+    }
+    if (p.avatar) { avatarData = p.avatar; renderAvatar(); }
+    loadAvatarFromServer();
+    updateCharCount('f-wishes','wish-count',300);
+    updateCharCount('f-offers','offer-count',300);
+    updateCharCount('f-bio','bio-count',400);
+    showSavedBadge();
+  } catch(e) { console.warn('Ladefehler', e); }
+}
+
+function saveProfile() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name)   { toast('⚠️ Anzeigename ist Pflicht'); return; }
+  const wishes = document.getElementById('f-wishes').value.trim();
+  if (!wishes) { toast('⚠️ Mindestens ein Wunsch erforderlich'); return; }
+  const offers = document.getElementById('f-offers').value.trim();
+  if (!offers) { toast('⚠️ Gib an, was du bieten kannst'); return; }
+  const region = document.getElementById('f-region').value;
+  if (!region) { toast('⚠️ Region wählen'); return; }
+
+  const yearVal = document.getElementById('f-year').value;
+  const year    = parseInt(yearVal);
+  if (yearVal && (year < 1940 || year > 2007)) { toast('⚠️ Gültiges Geburtsjahr eingeben'); return; }
+
+  const existing = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+  const wishArray = wishes.split(',').map(s => s.trim()).filter(Boolean);
+  const offerArray = offers.split(',').map(s => s.trim()).filter(Boolean);
+  
+  const profile = {
+    name,
+    year:         year || existing.year || null,
+    region,
+    province:     document.getElementById('f-province').value || null,
+    city:         document.getElementById('f-city').value || null,
+    bio:          document.getElementById('f-bio').value.trim() || '',
+    wishes:       wishArray,
+    offers:       offerArray,
+    avatar:       avatarData || null,
+    updated:      Date.now()
+  };
+
+  if (profile.year) {
+    document.getElementById('f-year').readOnly = true;
+    document.getElementById('year-hint').style.display = 'block';
+  }
+
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  localStorage.setItem('sm_name', name);
+  
+  // Auch an Server senden
+  const token = localStorage.getItem('sm_token');
+  if (token) {
+    fetch(`${API_BASE}/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: localStorage.getItem('sm_code'), name, spot: SPOT,
+        region: profile.region, province: profile.province, city: profile.city,
+        bio: profile.bio, wishTags: wishArray, offerTags: offerArray, token
+      })
+    }).catch(()=>{});
+  }
+  
+  showSavedBadge();
+  toast('✅ Cache-Profil gespeichert');
+}
+
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (!document.getElementById('f-name').value.trim()) return;
+    if (!document.getElementById('f-wishes').value.trim()) return;
+    if (!document.getElementById('f-offers').value.trim()) return;
+    if (!document.getElementById('f-region').value) return;
+    saveProfile();
+  }, 1500);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  fillRegions();
+  loadProfile();
+  updateCharCount('f-wishes','wish-count',300);
+  updateCharCount('f-offers','offer-count',300);
+  updateCharCount('f-bio','bio-count',400);
+});
+</script>
+</body>
+</html>
