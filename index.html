@@ -831,6 +831,18 @@
 <script>
 'use strict';
 
+// Globale Funktionen für Leaflet Popup-onclick
+// (müssen vor map.on('click') und renderMarkers verfügbar sein)
+var showSpotOwnerProfile, openInviteFromSpot, navigateToSpot, deleteSpot;
+
+window.addEventListener('load', () => {
+  // Nach initMap() reassignen damit Leaflet-Popups immer aktuell sind
+  window.showSpotOwnerProfile = (...a) => showSpotOwnerProfile(...a);
+  window.openInviteFromSpot   = (...a) => openInviteFromSpot(...a);
+  window.navigateToSpot       = (...a) => navigateToSpot(...a);
+  window.deleteSpot           = (...a) => deleteSpot(...a);
+});
+
 const API  = 'https://spotme-chat-obom.onrender.com/api';
 const CODE = localStorage.getItem('sm_code') || '000000';
 
@@ -995,31 +1007,29 @@ async function deleteSpot(id) {
   loadAllSpots();
 }
 
-// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+// ─── NAVIGATION (OSM) ────────────────────────────────────────────────────────
 function navigateToSpot(lat, lng) {
+  // Alten Nav-Toast entfernen
+  const old = document.getElementById('navToast');
+  if (old) old.remove();
+
+  map.setView([lat, lng], 17);
+
   if (!userPos) {
-    // Kein eigener Standort — trotzdem zu Spot zoomen
-    map.setView([lat, lng], 17);
     toast('📍 Spot auf Karte angezeigt');
     return;
   }
 
-  const dist = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng) * 1000);
+  const dist  = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng) * 1000);
   const angle = Math.atan2(lng - userPos.lng, lat - userPos.lat) * 180 / Math.PI;
   const dirs  = ['↑ N','↗ NO','→ O','↘ SO','↓ S','↙ SW','← W','↖ NW'];
   const dir   = dirs[((Math.round(angle / 45) % 8) + 8) % 8];
+  const distLabel = dist < 1000 ? `${dist}m` : `${(dist/1000).toFixed(1)}km`;
 
-  // Karte auf Spot zoomen
-  map.setView([lat, lng], 17);
+  // OSM-basierte Navigation via osmand:// oder Brouter oder plain OSM
+  const osmUrl = `https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
 
-  // Native Maps öffnen (iOS: Apple Maps, Android: Google Maps)
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const mapsUrl = isIOS
-    ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=w`
-    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`;
-
-  // Toast mit Distanz + Button zum Öffnen
-  showNavToast(dir, dist, mapsUrl);
+  showNavToast(dir, distLabel, osmUrl);
 }
 
 // ─── DRAWER ───────────────────────────────────────────────────────────────────
@@ -1451,12 +1461,7 @@ function esc(s) {
   return d.innerHTML;
 }
 
-function showNavToast(dir, dist, mapsUrl) {
-  // Alten Nav-Toast entfernen
-  const old = document.getElementById('navToast');
-  if (old) old.remove();
-
-  const distLabel = dist < 1000 ? `${dist}m` : `${(dist/1000).toFixed(1)}km`;
+function showNavToast(dir, distLabel, osmUrl) {
   const el = document.createElement('div');
   el.id = 'navToast';
   el.innerHTML = `
@@ -1465,12 +1470,12 @@ function showNavToast(dir, dist, mapsUrl) {
         <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--acc);">🧭 ${dir} · ${distLabel}</div>
         <div style="font-size:0.68rem;color:var(--muted2);margin-top:2px;">Spot auf Karte markiert</div>
       </div>
-      <a href="${mapsUrl}" target="_blank" style="
+      <a href="${osmUrl}" target="_blank" rel="noopener" style="
         padding:6px 12px;border-radius:8px;
         background:var(--acc);color:#0a0d12;
         font-weight:700;font-size:0.75rem;
         text-decoration:none;white-space:nowrap;flex-shrink:0;
-      ">Maps öffnen</a>
+      ">🗺️ OSM Route</a>
       <button onclick="document.getElementById('navToast').remove()" style="
         background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0 2px;
       ">✕</button>
@@ -1511,12 +1516,6 @@ function spotAgeHtml(ts) {
   if (!a) return '';
   return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
 }
-
-// Leaflet Popup braucht globalen Zugriff
-window.openInviteFromSpot   = openInviteFromSpot;
-window.navigateToSpot       = navigateToSpot;
-window.showSpotOwnerProfile = showSpotOwnerProfile;
-window.deleteSpot           = deleteSpot;
 
 // Close drawers on map click
 document.getElementById('map').addEventListener('touchstart', () => {
