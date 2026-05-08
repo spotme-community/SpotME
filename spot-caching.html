@@ -417,6 +417,45 @@
     }
     .empty-state .es-icon { font-size: 2.5rem; margin-bottom: 0.6rem; opacity: 0.5; }
 
+    /* Spot Detail Modal Mini-Map */
+    #spotDetailMap {
+      width: 100%;
+      height: 160px;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      border: 1px solid var(--bord2);
+    }
+    .spot-detail-header {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .spot-detail-avatar {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--acc), #f472b6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: 700;
+      flex-shrink: 0;
+      overflow: hidden;
+      border: 1px solid var(--acc-glow);
+    }
+    .spot-detail-avatar img { width:100%; height:100%; object-fit:cover; border-radius:12px; }
+    .spot-detail-divider {
+      height: 1px;
+      background: var(--bord);
+      margin: 0.75rem 0;
+    }
+    .spot-detail-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 0.4rem;
+    }
+
     /* ═══ MODAL ═══ */
     .modal-overlay {
       position: absolute;
@@ -586,6 +625,23 @@
       background: var(--muted);
       border-radius: 50%;
       border: 2px solid rgba(255,255,255,0.5);
+      position: relative;
+    }
+    /* Online-Puls: kleiner grüner Ring oben rechts am Spot-Marker */
+    .other-spot-marker.is-online::after {
+      content: '';
+      position: absolute;
+      top: -3px; right: -3px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 1.5px solid var(--bg);
+      box-shadow: 0 0 6px rgba(16,185,129,0.8);
+      animation: online-pulse 2s ease infinite;
+    }
+    @keyframes online-pulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.4); opacity: 0.6; }
     }
     .user-marker {
       width: 14px; height: 14px;
@@ -682,7 +738,7 @@
 </div>
 
 <!-- TOP BAR -->
-<div class="topbar">
+<div class="topbar" id="topbar">
   <div class="logo">
     <div class="logo-dot"></div>
     SPOT<span style="color:var(--text);font-weight:400">ME</span>
@@ -716,7 +772,7 @@
 </div>
 
 <!-- BOTTOM DOCK -->
-<div class="dock">
+<div class="dock" id="dock">
   <button class="dock-btn" onclick="openDrawer('myspots')">
     <span class="di">🟠</span>
     Meine Spots
@@ -783,8 +839,23 @@
   </div>
 </div>
 
+<!-- SPOT DETAIL MODAL -->
+<div class="modal-overlay" id="spotDetailModal" style="z-index:650;">
+  <div class="modal" style="max-height:88vh;overflow-y:auto;padding-bottom:max(1.5rem,env(safe-area-inset-bottom));">
+    <div class="modal-handle"></div>
+    <div id="spotDetailMap"></div>
+    <div id="spotDetailContent">
+      <div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.5rem;">
+      <button class="btn-ghost" style="flex:1;" onclick="closeModals()">Schließen</button>
+      <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn" onclick="confirmInviteFromDetail()">📨 Einladung senden</button>
+    </div>
+  </div>
+</div>
+
 <!-- PROFILE MODAL -->
-<div class="modal-overlay" id="profileModal">
+<div class="modal-overlay" id="profileModal" style="z-index:700;">
   <div class="modal" style="max-height:80vh;overflow-y:auto;">
     <div class="modal-handle"></div>
     <div id="profileModalContent">
@@ -831,11 +902,25 @@
 <script>
 'use strict';
 
+// Globale Funktionen für Leaflet Popup-onclick
+// (müssen vor map.on('click') und renderMarkers verfügbar sein)
+var showSpotOwnerProfile, openInviteFromSpot, navigateToSpot, deleteSpot;
+
+window.addEventListener('load', () => {
+  // Nach initMap() reassignen damit Leaflet-Popups immer aktuell sind
+  window.showSpotOwnerProfile = (...a) => showSpotOwnerProfile(...a);
+  window.openInviteFromSpot   = (...a) => openInviteFromSpot(...a);
+  window.navigateToSpot       = (...a) => navigateToSpot(...a);
+  window.deleteSpot           = (...a) => deleteSpot(...a);
+  window.openSpotDetail       = (...a) => openSpotDetail(...a);
+});
+
 const API  = 'https://spotme-chat-obom.onrender.com/api';
 const CODE = localStorage.getItem('sm_code') || '000000';
 
 let map, userPos, placeMode = false, tempLatLng = null;
 let mySpots = [], allSpots = [];
+let onlineSet = new Set();
 let selectedInviteSpot = null;
 let invitePollInterval = null;
 let knownInviteCount   = 0;
@@ -848,11 +933,9 @@ function initMap() {
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '© OSM'
+    attribution: '© OSM',
+    opacity: 0.72
   }).addTo(map);
-
-  // Dimming-Overlay über der Karte
-  document.getElementById('map').style.filter = 'brightness(0.72) saturate(0.7)';
 
   navigator.geolocation?.getCurrentPosition(pos => {
     userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -860,11 +943,8 @@ function initMap() {
       icon: L.divIcon({ html:'<div class="user-marker"></div>', iconSize:[14,14], className:'' })
     }).addTo(map).bindPopup('<b style="color:#22d3ee;">📍 Du</b>');
     map.setView([userPos.lat, userPos.lng], 15);
-    fetch(API+'/location', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ code:CODE, lat:userPos.lat, lng:userPos.lng, spot:'caching' })
-    }).catch(()=>{});
+    // Standort wird NICHT an Server gesendet (Datenschutz)
+    // Nur Heartbeat für Online-Status
   });
 
   map.on('click', e => {
@@ -900,28 +980,51 @@ async function loadAllSpots() {
   renderMarkers();
 }
 
-function renderMarkers() {
+async function renderMarkers() {
   map.eachLayer(l => { if (l._spotMarker) map.removeLayer(l); });
+
+  // Online-Status für alle Fremd-Spots parallel abfragen
+  onlineSet = new Set();
+  const others = allSpots.filter(s => s.code !== CODE);
+  await Promise.all(others.map(async s => {
+    try {
+      const r = await fetch(`${API}/online/${s.code}?spot=caching`);
+      if (r.ok) {
+        const d = await r.json();
+        if (d.online) onlineSet.add(s.code);
+      }
+    } catch {}
+  }));
+
   allSpots.forEach(s => {
-    const isMine = s.code === CODE;
+    const isMine  = s.code === CODE;
+    const isOnline = !isMine && onlineSet.has(s.code);
+    const markerClass = isMine
+      ? 'my-spot-marker'
+      : `other-spot-marker${isOnline ? ' is-online' : ''}`;
+
     const m = L.marker([s.lat, s.lng], {
       icon: L.divIcon({
-        html: `<div class="${isMine ? 'my-spot-marker' : 'other-spot-marker'}"></div>`,
+        html: `<div class="${markerClass}"></div>`,
         iconSize: isMine ? [20,20] : [16,16],
         className: ''
       })
     }).addTo(map);
     m._spotMarker = true;
 
+    const onlineBadge = isOnline
+      ? `<span style="font-size:0.68rem;color:var(--green);font-weight:600;">● Online</span>`
+      : `<span style="font-size:0.68rem;color:var(--muted);">○ Offline</span>`;
+
     let popup = `
       <div style="font-family:'Outfit',sans-serif;min-width:140px;">
         <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">${esc(s.name)}</div>
         <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">💭 ${s.wishTag}</div>
+        <div style="margin-bottom:4px;">${onlineBadge}</div>
         <div style="margin-bottom:8px;">${spotAgeHtml(s.createdAt || s.created_at)}</div>`;
     if (!isMine) {
-      popup += `<button class="pop-btn inv" onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}')">📨 Einladung</button>
-                <button class="pop-btn nav" onclick="navigateToSpot(${s.lat},${s.lng})">🧭 Route</button>
-                <button class="pop-btn" style="background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3);" onclick="showSpotOwnerProfile('${s.code}')">👤 Profil</button>`;
+      popup += `<button class="pop-btn inv" onclick="openSpotDetail(${s.id})">📋 Details & Einladung</button>
+                <button class="pop-btn nav" onclick="navigateToSpot(${s.lat},${s.lng})">🧭 Route</button>`;
     } else {
       popup += `<button class="pop-btn del" onclick="deleteSpot(${s.id})">🗑️ Löschen</button>`;
     }
@@ -995,16 +1098,29 @@ async function deleteSpot(id) {
   loadAllSpots();
 }
 
-// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+// ─── NAVIGATION (OSM) ────────────────────────────────────────────────────────
 function navigateToSpot(lat, lng) {
-  if (!userPos) { toast('❌ Standort unbekannt'); return; }
-  const dist  = Math.round(Math.sqrt((userPos.lat-lat)**2+(userPos.lng-lng)**2)*111000);
-  const angle = Math.atan2(lng-userPos.lng, lat-userPos.lat)*180/Math.PI;
+  // Alten Nav-Toast entfernen
+  const old = document.getElementById('navToast');
+  if (old) old.remove();
+
+  map.setView([lat, lng], 17);
+
+  if (!userPos) {
+    toast('📍 Spot auf Karte angezeigt');
+    return;
+  }
+
+  const dist  = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng) * 1000);
+  const angle = Math.atan2(lng - userPos.lng, lat - userPos.lat) * 180 / Math.PI;
   const dirs  = ['↑ N','↗ NO','→ O','↘ SO','↓ S','↙ SW','← W','↖ NW'];
-  const dir   = dirs[Math.round(angle/45)%8];
-  map.setView([(userPos.lat+lat)/2, (userPos.lng+lng)/2], 15);
-  L.marker([lat, lng], { icon: L.divIcon({ html:'🎯', iconSize:[30,30] }) }).addTo(map).bindPopup('Ziel').openPopup();
-  toast(`🧭 ${dir} · ${dist}m`);
+  const dir   = dirs[((Math.round(angle / 45) % 8) + 8) % 8];
+  const distLabel = dist < 1000 ? `${dist}m` : `${(dist/1000).toFixed(1)}km`;
+
+  // OSM-basierte Navigation via osmand:// oder Brouter oder plain OSM
+  const osmUrl = `https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
+
+  showNavToast(dir, distLabel, osmUrl);
 }
 
 // ─── DRAWER ───────────────────────────────────────────────────────────────────
@@ -1045,18 +1161,20 @@ function openDrawer(type) {
     body.innerHTML = others.length
       ? others.map(s=>`
         <div class="spot-card">
-          <div class="sc-icon">⚪</div>
+          <div class="sc-icon" style="position:relative;">⚪
+            ${onlineSet?.has(s.code) ? '<span style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#10b981;border:1.5px solid var(--bg);box-shadow:0 0 6px rgba(16,185,129,0.8);"></span>' : ''}
+          </div>
           <div class="sc-info">
             <div class="sc-name">${esc(s.name)}</div>
             <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px;">
               <span class="sc-tag">${s.wishTag}</span>
+              ${onlineSet?.has(s.code) ? '<span style="font-size:0.65rem;color:#10b981;font-weight:600;">● Online</span>' : ''}
               ${spotAgeHtml(s.createdAt || s.created_at)}
             </div>
           </div>
           <div class="sc-actions">
-            <button class="sc-btn" onclick="showSpotOwnerProfile('${s.code}')">👤</button>
             <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
-            <button class="sc-btn primary"  onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}'); closeDrawer()">📨</button>
+            <button class="sc-btn primary"  onclick="openSpotDetail(${s.id})">📋</button>
           </div>
         </div>`).join('')
       : `<div class="empty-state"><div class="es-icon">🌐</div>Keine Spots in der Nähe.</div>`;
@@ -1124,7 +1242,7 @@ async function loadInvitesIntoDrawer(body) {
           ? `<button class="sc-btn success" onclick="acceptInvite(${inv.id})">✅</button>`
           : ''}
         ${inv.status==='accepted'
-          ? `<button class="sc-btn navigate" onclick="navigateToSpot(${inv.lat||39.47},${inv.lng||-0.38})">🧭</button>
+          ? `<button class="sc-btn navigate" onclick="navigateToInviteSpot(${inv.spotId||inv.spot_id||'null'}, ${inv.lat||'null'}, ${inv.lng||'null'})">🧭</button>
              <button class="sc-btn primary"  onclick="checkIn(${inv.id})">📍</button>`
           : ''}
       </div>
@@ -1136,6 +1254,141 @@ function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('show');
   currentDrawer = null;
+}
+
+// ─── SPOT DETAIL (vor Einladung) ─────────────────────────────────────────────
+let detailSpot = null;
+let detailMiniMap = null;
+
+async function openSpotDetail(spotId) {
+  const spot = allSpots.find(s => s.id === spotId);
+  if (!spot) { toast('⚠️ Spot nicht gefunden'); return; }
+  detailSpot = spot;
+
+  document.getElementById('spotDetailContent').innerHTML =
+    `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+  document.getElementById('spotDetailModal').classList.add('show');
+  map.closePopup();
+  closeDrawer();
+
+  // Mini-Map initialisieren oder updaten
+  const mapEl = document.getElementById('spotDetailMap');
+  if (detailMiniMap) {
+    detailMiniMap.remove();
+    detailMiniMap = null;
+  }
+  mapEl.style.display = 'block';
+  setTimeout(() => {
+    detailMiniMap = L.map('spotDetailMap', {
+      zoomControl: false, attributionControl: false,
+      dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, touchZoom: false,
+      tap: false
+    }).setView([spot.lat, spot.lng], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, opacity: 0.75
+    }).addTo(detailMiniMap);
+
+    L.marker([spot.lat, spot.lng], {
+      icon: L.divIcon({
+        html: '<div class="my-spot-marker"></div>',
+        iconSize: [20,20], className: ''
+      })
+    }).addTo(detailMiniMap);
+
+    // Eigene Position wenn vorhanden
+    if (userPos) {
+      L.marker([userPos.lat, userPos.lng], {
+        icon: L.divIcon({
+          html: '<div class="user-marker"></div>',
+          iconSize: [14,14], className: ''
+        })
+      }).addTo(detailMiniMap);
+
+      detailMiniMap.fitBounds(
+        [[spot.lat, spot.lng], [userPos.lat, userPos.lng]],
+        { padding: [24, 24] }
+      );
+    }
+
+    // Mini-Map Touch-Events komplett blockieren
+    const mapEl = document.getElementById('spotDetailMap');
+    mapEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    mapEl.style.pointerEvents = 'none'; // rein dekorativ, keine Interaktion
+  }, 100);
+
+  // Profil + Online-Status parallel laden
+  const isOnline = onlineSet.has(spot.code);
+  let profile = null, avatarData = null;
+  try {
+    const [pRes, aRes] = await Promise.all([
+      fetch(`${API}/profile/${spot.code}?spot=caching`),
+      fetch(`${API}/avatar/${spot.code}?spot=caching`)
+    ]);
+    if (pRes.ok) profile = await pRes.json();
+    if (aRes.ok) avatarData = await aRes.json();
+  } catch {}
+
+  const dist = userPos
+    ? (() => {
+        const d = Math.round(haversineKm(userPos.lat, userPos.lng, spot.lat, spot.lng) * 1000);
+        return d < 1000 ? `${d}m` : `${(d/1000).toFixed(1)}km`;
+      })()
+    : null;
+
+  const initial    = profile?.name?.[0]?.toUpperCase() || '?';
+  const avatarHtml = avatarData?.avatar
+    ? `<img src="${avatarData.avatar}" alt="">`
+    : initial;
+
+  const wishes = (profile?.wishTags || profile?.wishes || []).filter(Boolean);
+  const offers = (profile?.offerTags || profile?.offers || []).filter(Boolean);
+
+  document.getElementById('spotDetailContent').innerHTML = `
+    <div class="spot-detail-header">
+      <div class="spot-detail-avatar">${avatarHtml}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:1rem;">${esc(spot.name)}</div>
+        <div style="font-size:0.78rem;color:var(--muted2);margin-top:2px;">
+          ${profile?.name ? `👤 ${esc(profile.name)}` : ''}
+          ${profile?.age ? `· ${profile.age} J.` : ''}
+        </div>
+        <div class="spot-detail-row" style="margin-top:4px;">
+          <span class="sc-tag">${spot.wishTag}</span>
+          ${isOnline
+            ? `<span style="font-size:0.68rem;color:var(--green);font-weight:600;font-family:'Space Mono',monospace;">● Online</span>`
+            : `<span style="font-size:0.68rem;color:var(--muted);font-family:'Space Mono',monospace;">○ Offline</span>`}
+          ${spotAgeHtml(spot.createdAt || spot.created_at)}
+        </div>
+      </div>
+    </div>
+
+    ${dist ? `<div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.5rem;">📍 ${dist} von dir entfernt</div>` : ''}
+
+    ${profile?.bio ? `
+      <div style="font-size:0.82rem;color:var(--muted2);line-height:1.55;padding:0.65rem 0.75rem;background:var(--card);border-radius:10px;border:1px solid var(--bord);margin-bottom:0.6rem;">
+        ${esc(profile.bio)}
+      </div>` : ''}
+
+    ${wishes.length ? `
+      <div style="margin-bottom:0.5rem;">
+        <div style="font-size:0.62rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">WÜNSCHE</div>
+        <div>${wishes.map(w=>`<span class="profile-chip">💭 ${esc(w)}</span>`).join('')}</div>
+      </div>` : ''}
+
+    ${offers.length ? `
+      <div>
+        <div style="font-size:0.62rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">BIETET</div>
+        <div>${offers.map(o=>`<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('')}</div>
+      </div>` : ''}
+  `;
+}
+
+function confirmInviteFromDetail() {
+  if (!detailSpot) return;
+  closeModals();
+  setTimeout(() => openInviteFromSpot(detailSpot.id, detailSpot.name, detailSpot.wishTag), 200);
 }
 
 // ─── INVITE ──────────────────────────────────────────────────────────────────
@@ -1288,6 +1541,24 @@ async function showSpotOwnerProfile(ownerCode) {
   }
 }
 
+// Einladungs-Navigation: Spot aus allSpots holen, sonst direkte Coords
+function navigateToInviteSpot(spotId, lat, lng) {
+  // Zuerst in allSpots nachschlagen
+  const spot = allSpots.find(s => s.id === spotId);
+  if (spot) {
+    map.setView([spot.lat, spot.lng], 17);
+    navigateToSpot(spot.lat, spot.lng);
+    return;
+  }
+  // Fallback: direkte Koordinaten wenn vorhanden
+  if (lat && lng) {
+    navigateToSpot(lat, lng);
+    return;
+  }
+  toast('⚠️ Spot-Koordinaten nicht verfügbar');
+}
+window.navigateToInviteSpot = navigateToInviteSpot;
+
 // ─── RADIUS SEARCH ───────────────────────────────────────────────────────────
 let radiusCircle = null, activeRadius = null;
 
@@ -1376,9 +1647,8 @@ function openDrawerFiltered(spots, km) {
         </div>
       </div>
       <div class="sc-actions">
-        <button class="sc-btn" onclick="showSpotOwnerProfile('${s.code}')">👤</button>
         <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
-        <button class="sc-btn primary"  onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}'); closeDrawer()">📨</button>
+        <button class="sc-btn primary"  onclick="openSpotDetail(${s.id})">📋</button>
       </div>
     </div>`;
   }).join('');
@@ -1436,6 +1706,39 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function showNavToast(dir, distLabel, osmUrl) {
+  const el = document.createElement('div');
+  el.id = 'navToast';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--acc);">🧭 ${dir} · ${distLabel}</div>
+        <div style="font-size:0.68rem;color:var(--muted2);margin-top:2px;">Spot auf Karte markiert</div>
+      </div>
+      <a href="${osmUrl}" target="_blank" rel="noopener" style="
+        padding:6px 12px;border-radius:8px;
+        background:var(--acc);color:#0a0d12;
+        font-weight:700;font-size:0.75rem;
+        text-decoration:none;white-space:nowrap;flex-shrink:0;
+      ">🗺️ OSM Route</a>
+      <button onclick="document.getElementById('navToast').remove()" style="
+        background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0 2px;
+      ">✕</button>
+    </div>
+  `;
+  el.style.cssText = `
+    position:absolute;bottom:90px;left:1rem;right:1rem;
+    z-index:900;
+    background:var(--glass2);
+    backdrop-filter:blur(20px);
+    border:1px solid var(--bord2);
+    border-radius:14px;
+    padding:0.75rem 1rem;
+    animation:fadeIn 0.3s ease;
+  `;
+  document.body.appendChild(el);
+}
+
 function maskCode(c) { return c?.slice(0,3)+'…'; }
 
 // ─── SPOT ALTER ───────────────────────────────────────────────────────────────
@@ -1459,7 +1762,14 @@ function spotAgeHtml(ts) {
   return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
 }
 
-// Close drawers on map click
+// Touch-Events der UI-Elemente stoppen – sonst schließt der Map-Listener alles
+['drawer','dock','topbar','drawerOverlay','spotModal','inviteModal','radiusModal','profileModal','matchScreen','spotDetailModal']
+  .forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  });
+
+// Nur echte Karten-Touches schließen den Drawer
 document.getElementById('map').addEventListener('touchstart', () => {
   if (currentDrawer) closeDrawer();
 }, { passive: true });
