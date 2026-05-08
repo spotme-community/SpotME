@@ -784,7 +784,7 @@
 </div>
 
 <!-- PROFILE MODAL -->
-<div class="modal-overlay" id="profileModal">
+<div class="modal-overlay" id="profileModal" style="z-index:700;">
   <div class="modal" style="max-height:80vh;overflow-y:auto;">
     <div class="modal-handle"></div>
     <div id="profileModalContent">
@@ -1458,6 +1458,12 @@ function spotAgeHtml(ts) {
   if (!a) return '';
   return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
 }
+
+// Leaflet Popup braucht globalen Zugriff
+window.openInviteFromSpot   = openInviteFromSpot;
+window.navigateToSpot       = navigateToSpot;
+window.showSpotOwnerProfile = showSpotOwnerProfile;
+window.deleteSpot           = deleteSpot;
 
 // Close drawers on map click
 document.getElementById('map').addEventListener('touchstart', () => {
