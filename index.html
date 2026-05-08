@@ -586,6 +586,23 @@
       background: var(--muted);
       border-radius: 50%;
       border: 2px solid rgba(255,255,255,0.5);
+      position: relative;
+    }
+    /* Online-Puls: kleiner grüner Ring oben rechts am Spot-Marker */
+    .other-spot-marker.is-online::after {
+      content: '';
+      position: absolute;
+      top: -3px; right: -3px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 1.5px solid var(--bg);
+      box-shadow: 0 0 6px rgba(16,185,129,0.8);
+      animation: online-pulse 2s ease infinite;
+    }
+    @keyframes online-pulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.4); opacity: 0.6; }
     }
     .user-marker {
       width: 14px; height: 14px;
@@ -848,6 +865,7 @@ const CODE = localStorage.getItem('sm_code') || '000000';
 
 let map, userPos, placeMode = false, tempLatLng = null;
 let mySpots = [], allSpots = [];
+let onlineSet = new Set();
 let selectedInviteSpot = null;
 let invitePollInterval = null;
 let knownInviteCount   = 0;
@@ -870,11 +888,8 @@ function initMap() {
       icon: L.divIcon({ html:'<div class="user-marker"></div>', iconSize:[14,14], className:'' })
     }).addTo(map).bindPopup('<b style="color:#22d3ee;">📍 Du</b>');
     map.setView([userPos.lat, userPos.lng], 15);
-    fetch(API+'/location', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ code:CODE, lat:userPos.lat, lng:userPos.lng, spot:'caching' })
-    }).catch(()=>{});
+    // Standort wird NICHT an Server gesendet (Datenschutz)
+    // Nur Heartbeat für Online-Status
   });
 
   map.on('click', e => {
@@ -910,23 +925,47 @@ async function loadAllSpots() {
   renderMarkers();
 }
 
-function renderMarkers() {
+async function renderMarkers() {
   map.eachLayer(l => { if (l._spotMarker) map.removeLayer(l); });
+
+  // Online-Status für alle Fremd-Spots parallel abfragen
+  onlineSet = new Set();
+  const others = allSpots.filter(s => s.code !== CODE);
+  await Promise.all(others.map(async s => {
+    try {
+      const r = await fetch(`${API}/online/${s.code}?spot=caching`);
+      if (r.ok) {
+        const d = await r.json();
+        if (d.online) onlineSet.add(s.code);
+      }
+    } catch {}
+  }));
+
   allSpots.forEach(s => {
-    const isMine = s.code === CODE;
+    const isMine  = s.code === CODE;
+    const isOnline = !isMine && onlineSet.has(s.code);
+    const markerClass = isMine
+      ? 'my-spot-marker'
+      : `other-spot-marker${isOnline ? ' is-online' : ''}`;
+
     const m = L.marker([s.lat, s.lng], {
       icon: L.divIcon({
-        html: `<div class="${isMine ? 'my-spot-marker' : 'other-spot-marker'}"></div>`,
+        html: `<div class="${markerClass}"></div>`,
         iconSize: isMine ? [20,20] : [16,16],
         className: ''
       })
     }).addTo(map);
     m._spotMarker = true;
 
+    const onlineBadge = isOnline
+      ? `<span style="font-size:0.68rem;color:var(--green);font-weight:600;">● Online</span>`
+      : `<span style="font-size:0.68rem;color:var(--muted);">○ Offline</span>`;
+
     let popup = `
       <div style="font-family:'Outfit',sans-serif;min-width:140px;">
         <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">${esc(s.name)}</div>
         <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">💭 ${s.wishTag}</div>
+        <div style="margin-bottom:4px;">${onlineBadge}</div>
         <div style="margin-bottom:8px;">${spotAgeHtml(s.createdAt || s.created_at)}</div>`;
     if (!isMine) {
       popup += `<button class="pop-btn inv" onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}')">📨 Einladung</button>
@@ -1068,11 +1107,14 @@ function openDrawer(type) {
     body.innerHTML = others.length
       ? others.map(s=>`
         <div class="spot-card">
-          <div class="sc-icon">⚪</div>
+          <div class="sc-icon" style="position:relative;">⚪
+            ${onlineSet?.has(s.code) ? '<span style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#10b981;border:1.5px solid var(--bg);box-shadow:0 0 6px rgba(16,185,129,0.8);"></span>' : ''}
+          </div>
           <div class="sc-info">
             <div class="sc-name">${esc(s.name)}</div>
             <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px;">
               <span class="sc-tag">${s.wishTag}</span>
+              ${onlineSet?.has(s.code) ? '<span style="font-size:0.65rem;color:#10b981;font-weight:600;">● Online</span>' : ''}
               ${spotAgeHtml(s.createdAt || s.created_at)}
             </div>
           </div>
