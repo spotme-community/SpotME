@@ -50,6 +50,15 @@
       z-index: 0;
     }
 
+    /* Dimming-Overlay – liegt optisch über der Karte, lässt aber alle Klicks durch */
+    #map-dim {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: rgba(10,13,18,0.28);
+      pointer-events: none;
+    }
+
     .leaflet-control-attribution { display: none !important; }
     .leaflet-popup-content-wrapper {
       background: var(--glass2) !important;
@@ -670,6 +679,7 @@
 
 <!-- MAP -->
 <div id="map"></div>
+<div id="map-dim"></div>
 
 <!-- Crosshair (place mode) -->
 <div class="crosshair" id="crosshair"></div>
@@ -862,9 +872,6 @@ function initMap() {
     maxZoom: 19,
     attribution: '© OSM'
   }).addTo(map);
-
-  // Dimming-Overlay über der Karte
-  document.getElementById('map').style.filter = 'brightness(0.72) saturate(0.7)';
 
   navigator.geolocation?.getCurrentPosition(pos => {
     userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
