@@ -682,7 +682,7 @@
 </div>
 
 <!-- TOP BAR -->
-<div class="topbar">
+<div class="topbar" id="topbar">
   <div class="logo">
     <div class="logo-dot"></div>
     SPOT<span style="color:var(--text);font-weight:400">ME</span>
@@ -716,7 +716,7 @@
 </div>
 
 <!-- BOTTOM DOCK -->
-<div class="dock">
+<div class="dock" id="dock">
   <button class="dock-btn" onclick="openDrawer('myspots')">
     <span class="di">🟠</span>
     Meine Spots
@@ -1515,7 +1515,14 @@ function spotAgeHtml(ts) {
   return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
 }
 
-// Close drawers on map click
+// Touch-Events der UI-Elemente stoppen – sonst schließt der Map-Listener alles
+['drawer','dock','topbar','drawerOverlay','spotModal','inviteModal','radiusModal','profileModal','matchScreen']
+  .forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  });
+
+// Nur echte Karten-Touches schließen den Drawer
 document.getElementById('map').addEventListener('touchstart', () => {
   if (currentDrawer) closeDrawer();
 }, { passive: true });
