@@ -1147,7 +1147,7 @@ async function loadInvitesIntoDrawer(body) {
           ? `<button class="sc-btn success" onclick="acceptInvite(${inv.id})">✅</button>`
           : ''}
         ${inv.status==='accepted'
-          ? `<button class="sc-btn navigate" onclick="navigateToSpot(${inv.lat||39.47},${inv.lng||-0.38})">🧭</button>
+          ? `<button class="sc-btn navigate" onclick="navigateToInviteSpot(${inv.spotId||inv.spot_id||'null'}, ${inv.lat||'null'}, ${inv.lng||'null'})">🧭</button>
              <button class="sc-btn primary"  onclick="checkIn(${inv.id})">📍</button>`
           : ''}
       </div>
@@ -1310,6 +1310,24 @@ async function showSpotOwnerProfile(ownerCode) {
     content.innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div>Fehler beim Laden.</div>`;
   }
 }
+
+// Einladungs-Navigation: Spot aus allSpots holen, sonst direkte Coords
+function navigateToInviteSpot(spotId, lat, lng) {
+  // Zuerst in allSpots nachschlagen
+  const spot = allSpots.find(s => s.id === spotId);
+  if (spot) {
+    map.setView([spot.lat, spot.lng], 17);
+    navigateToSpot(spot.lat, spot.lng);
+    return;
+  }
+  // Fallback: direkte Koordinaten wenn vorhanden
+  if (lat && lng) {
+    navigateToSpot(lat, lng);
+    return;
+  }
+  toast('⚠️ Spot-Koordinaten nicht verfügbar');
+}
+window.navigateToInviteSpot = navigateToInviteSpot;
 
 // ─── RADIUS SEARCH ───────────────────────────────────────────────────────────
 let radiusCircle = null, activeRadius = null;
