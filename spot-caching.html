@@ -611,6 +611,35 @@
     .pop-btn.nav { background: rgba(34,211,238,0.2); color: var(--cyan); border: 1px solid rgba(34,211,238,0.4); }
     .pop-btn.del { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
 
+    /* Profile modal */
+    .profile-avatar-lg {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--acc), #f472b6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; font-weight: 700;
+      margin: 0 auto 0.75rem;
+      overflow: hidden;
+      border: 2px solid var(--acc-glow);
+    }
+    .profile-avatar-lg img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .profile-chip {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 4px 10px;
+      border-radius: 100px;
+      background: var(--acc-dim);
+      border: 1px solid var(--acc-glow);
+      color: var(--acc);
+      font-size: 0.7rem;
+      font-weight: 500;
+      margin: 2px;
+    }
+    .profile-chip.offer {
+      background: rgba(34,211,238,0.08);
+      border-color: rgba(34,211,238,0.25);
+      color: var(--cyan);
+    }
+
     /* Radius choice buttons */
     .radius-choice {
       padding: 0.75rem 0.5rem;
@@ -754,6 +783,19 @@
   </div>
 </div>
 
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal" style="max-height:80vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div id="profileModalContent">
+      <div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>
+    </div>
+    <div style="margin-top:1rem;">
+      <button class="btn-ghost" style="width:100%;" onclick="closeModals()">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- RADIUS MODAL -->
 <div class="modal-overlay" id="radiusModal">
   <div class="modal">
@@ -878,7 +920,8 @@ function renderMarkers() {
         <div style="margin-bottom:8px;">${spotAgeHtml(s.createdAt || s.created_at)}</div>`;
     if (!isMine) {
       popup += `<button class="pop-btn inv" onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}')">📨 Einladung</button>
-                <button class="pop-btn nav" onclick="navigateToSpot(${s.lat},${s.lng})">🧭 Route</button>`;
+                <button class="pop-btn nav" onclick="navigateToSpot(${s.lat},${s.lng})">🧭 Route</button>
+                <button class="pop-btn" style="background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3);" onclick="showSpotOwnerProfile('${s.code}')">👤 Profil</button>`;
     } else {
       popup += `<button class="pop-btn del" onclick="deleteSpot(${s.id})">🗑️ Löschen</button>`;
     }
@@ -1011,6 +1054,7 @@ function openDrawer(type) {
             </div>
           </div>
           <div class="sc-actions">
+            <button class="sc-btn" onclick="showSpotOwnerProfile('${s.code}')">👤</button>
             <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
             <button class="sc-btn primary"  onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}'); closeDrawer()">📨</button>
           </div>
@@ -1187,6 +1231,63 @@ function updateInviteBadge(n) {
   else        { badge.style.display = 'none'; }
 }
 
+// ─── SPOT OWNER PROFIL ───────────────────────────────────────────────────────
+async function showSpotOwnerProfile(ownerCode) {
+  const content = document.getElementById('profileModalContent');
+  content.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+  document.getElementById('profileModal').classList.add('show');
+
+  try {
+    const [profileRes, avatarRes, verifRes] = await Promise.all([
+      fetch(`${API}/profile/${ownerCode}?spot=caching`),
+      fetch(`${API}/avatar/${ownerCode}?spot=caching`),
+      fetch(`${API}/verifications/${ownerCode}?spot=caching`)
+    ]);
+
+    const profile       = profileRes.ok  ? await profileRes.json()  : null;
+    const avatarData    = avatarRes.ok   ? await avatarRes.json()   : null;
+    const verifications = verifRes.ok    ? await verifRes.json()    : [];
+
+    if (!profile?.name) {
+      content.innerHTML = `<div class="empty-state"><div class="es-icon">👤</div>Profil nicht gefunden.</div>`;
+      return;
+    }
+
+    const personalCount = verifications.filter(v => v.type === 'personal').length;
+    const verifiedHtml  = personalCount > 0
+      ? `<div style="color:var(--green);font-size:0.78rem;font-weight:600;margin-top:4px;">✓ Persönlich getroffen · ${personalCount}×</div>`
+      : '';
+
+    const initial    = profile.name[0]?.toUpperCase() || '?';
+    const avatarHtml = avatarData?.avatar
+      ? `<img src="${avatarData.avatar}" alt="Avatar">`
+      : initial;
+
+    const wishes  = (profile.wishTags  || profile.wishes  || []).filter(Boolean);
+    const offers  = (profile.offerTags || profile.offers  || []).filter(Boolean);
+    const bio     = profile.bio || '';
+    const location = [profile.city, profile.region].filter(Boolean).join(', ');
+    const age      = profile.age ? `${profile.age} J.` : '';
+
+    const wishChips  = wishes.map(w => `<span class="profile-chip">💭 ${esc(w)}</span>`).join('');
+    const offerChips = offers.map(o => `<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('');
+
+    content.innerHTML = `
+      <div style="text-align:center;margin-bottom:1rem;">
+        <div class="profile-avatar-lg">${avatarHtml}</div>
+        <div style="font-family:'Space Mono',monospace;font-size:1rem;font-weight:700;color:var(--acc);">${esc(profile.name)}</div>
+        ${age || location ? `<div style="font-size:0.78rem;color:var(--muted2);margin-top:3px;">${[age,location].filter(Boolean).join(' · ')}</div>` : ''}
+        ${verifiedHtml}
+      </div>
+      ${wishes.length ? `<div style="margin-bottom:0.6rem;"><div style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">WÜNSCHE</div>${wishChips}</div>` : ''}
+      ${offers.length ? `<div style="margin-bottom:0.6rem;"><div style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">BIETET</div>${offerChips}</div>` : ''}
+      ${bio ? `<div style="font-size:0.85rem;color:var(--muted2);line-height:1.5;margin-top:0.5rem;padding:0.75rem;background:var(--card);border-radius:10px;border:1px solid var(--bord);">${esc(bio)}</div>` : ''}
+    `;
+  } catch {
+    content.innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div>Fehler beim Laden.</div>`;
+  }
+}
+
 // ─── RADIUS SEARCH ───────────────────────────────────────────────────────────
 let radiusCircle = null, activeRadius = null;
 
@@ -1275,6 +1376,7 @@ function openDrawerFiltered(spots, km) {
         </div>
       </div>
       <div class="sc-actions">
+        <button class="sc-btn" onclick="showSpotOwnerProfile('${s.code}')">👤</button>
         <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
         <button class="sc-btn primary"  onclick="openInviteFromSpot(${s.id},'${esc(s.name)}','${s.wishTag}'); closeDrawer()">📨</button>
       </div>
