@@ -997,14 +997,29 @@ async function deleteSpot(id) {
 
 // ─── NAVIGATION ──────────────────────────────────────────────────────────────
 function navigateToSpot(lat, lng) {
-  if (!userPos) { toast('❌ Standort unbekannt'); return; }
-  const dist  = Math.round(Math.sqrt((userPos.lat-lat)**2+(userPos.lng-lng)**2)*111000);
-  const angle = Math.atan2(lng-userPos.lng, lat-userPos.lat)*180/Math.PI;
+  if (!userPos) {
+    // Kein eigener Standort — trotzdem zu Spot zoomen
+    map.setView([lat, lng], 17);
+    toast('📍 Spot auf Karte angezeigt');
+    return;
+  }
+
+  const dist = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng) * 1000);
+  const angle = Math.atan2(lng - userPos.lng, lat - userPos.lat) * 180 / Math.PI;
   const dirs  = ['↑ N','↗ NO','→ O','↘ SO','↓ S','↙ SW','← W','↖ NW'];
-  const dir   = dirs[Math.round(angle/45)%8];
-  map.setView([(userPos.lat+lat)/2, (userPos.lng+lng)/2], 15);
-  L.marker([lat, lng], { icon: L.divIcon({ html:'🎯', iconSize:[30,30] }) }).addTo(map).bindPopup('Ziel').openPopup();
-  toast(`🧭 ${dir} · ${dist}m`);
+  const dir   = dirs[((Math.round(angle / 45) % 8) + 8) % 8];
+
+  // Karte auf Spot zoomen
+  map.setView([lat, lng], 17);
+
+  // Native Maps öffnen (iOS: Apple Maps, Android: Google Maps)
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const mapsUrl = isIOS
+    ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=w`
+    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`;
+
+  // Toast mit Distanz + Button zum Öffnen
+  showNavToast(dir, dist, mapsUrl);
 }
 
 // ─── DRAWER ───────────────────────────────────────────────────────────────────
@@ -1434,6 +1449,44 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = String(s||'');
   return d.innerHTML;
+}
+
+function showNavToast(dir, dist, mapsUrl) {
+  // Alten Nav-Toast entfernen
+  const old = document.getElementById('navToast');
+  if (old) old.remove();
+
+  const distLabel = dist < 1000 ? `${dist}m` : `${(dist/1000).toFixed(1)}km`;
+  const el = document.createElement('div');
+  el.id = 'navToast';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--acc);">🧭 ${dir} · ${distLabel}</div>
+        <div style="font-size:0.68rem;color:var(--muted2);margin-top:2px;">Spot auf Karte markiert</div>
+      </div>
+      <a href="${mapsUrl}" target="_blank" style="
+        padding:6px 12px;border-radius:8px;
+        background:var(--acc);color:#0a0d12;
+        font-weight:700;font-size:0.75rem;
+        text-decoration:none;white-space:nowrap;flex-shrink:0;
+      ">Maps öffnen</a>
+      <button onclick="document.getElementById('navToast').remove()" style="
+        background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0 2px;
+      ">✕</button>
+    </div>
+  `;
+  el.style.cssText = `
+    position:absolute;bottom:90px;left:1rem;right:1rem;
+    z-index:900;
+    background:var(--glass2);
+    backdrop-filter:blur(20px);
+    border:1px solid var(--bord2);
+    border-radius:14px;
+    padding:0.75rem 1rem;
+    animation:fadeIn 0.3s ease;
+  `;
+  document.body.appendChild(el);
 }
 
 function maskCode(c) { return c?.slice(0,3)+'…'; }
