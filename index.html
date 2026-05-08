@@ -50,15 +50,6 @@
       z-index: 0;
     }
 
-    /* Dimming-Overlay – liegt optisch über der Karte, lässt aber alle Klicks durch */
-    #map-dim {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      background: rgba(10,13,18,0.28);
-      pointer-events: none;
-    }
-
     .leaflet-control-attribution { display: none !important; }
     .leaflet-popup-content-wrapper {
       background: var(--glass2) !important;
@@ -679,7 +670,6 @@
 
 <!-- MAP -->
 <div id="map"></div>
-<div id="map-dim"></div>
 
 <!-- Crosshair (place mode) -->
 <div class="crosshair" id="crosshair"></div>
@@ -870,7 +860,8 @@ function initMap() {
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '© OSM'
+    attribution: '© OSM',
+    opacity: 0.72
   }).addTo(map);
 
   navigator.geolocation?.getCurrentPosition(pos => {
