@@ -1762,12 +1762,15 @@ function spotAgeHtml(ts) {
   return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
 }
 
-// Touch-Events der UI-Elemente stoppen – sonst schließt der Map-Listener alles
-['drawer','dock','topbar','drawerOverlay','spotModal','inviteModal','radiusModal','profileModal','matchScreen','spotDetailModal']
-  .forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-  });
+// Touch-Events der UI-Elemente stoppen – CSS-Isolation + JS-Blocker
+// Alle UI-Layer über der Karte bekommen touch-action: auto und stoppen Bubbling
+document.addEventListener('touchstart', e => {
+  const map = document.getElementById('map');
+  // Wenn Touch NICHT auf der Karte selbst — Drawer schließen verhindern
+  if (!map.contains(e.target)) {
+    e.stopImmediatePropagation();
+  }
+}, { passive: true, capture: true });
 
 // Nur echte Karten-Touches schließen den Drawer
 document.getElementById('map').addEventListener('touchstart', () => {
