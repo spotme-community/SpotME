@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SpotMe · Caching</title>
+  <meta name="theme-color" content="#0a0d12">
+  <link rel="manifest" href="manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    :root {
+      --bg:      #0a0d12;
+      --sur:     #0f1318;
+      --glass:   rgba(15,19,24,0.88);
+      --glass2:  rgba(20,26,36,0.92);
+      --card:    #141a22;
+      --card2:   #1a2230;
+      --bord:    rgba(255,255,255,0.07);
+      --bord2:   rgba(255,255,255,0.13);
+      --acc:     #f59e0b;
+      --acc2:    #fbbf24;
+      --acc-dim: rgba(245,158,11,0.12);
+      --acc-glow:rgba(245,158,11,0.25);
+      --cyan:    #22d3ee;
+      --green:   #10b981;
+      --red:     #ef4444;
+      --text:    #e2e8f0;
+      --muted:   #64748b;
+      --muted2:  #94a3b8;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+    html, body {
+      height: 100%; width: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 16px;
+    }
+
+    body { display: flex; flex-direction: column; position: relative; }
+
+    /* ═══ MAP ═══ */
+    #map {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+
+    .leaflet-control-attribution { display: none !important; }
+    .leaflet-popup                { display: none !important; }
+
+    /* ═══ TOP BAR ═══ */
+    .topbar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      padding-top: max(0.75rem, env(safe-area-inset-top));
+      background: linear-gradient(to bottom, rgba(10,13,18,0.95) 0%, transparent 100%);
+    }
+
+    .logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--acc);
+      letter-spacing: 0.05em;
+      margin-right: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .logo-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--acc);
+      box-shadow: 0 0 10px var(--acc);
+      animation: pulse-dot 2s ease infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.5; transform:scale(0.7); }
+    }
+    .logo-sub {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 300;
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .icon-btn {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      border: 1px solid var(--bord2);
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      color: var(--muted2);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .icon-btn:active { transform: scale(0.93); background: var(--acc-dim); border-color: var(--acc-glow); color: var(--acc); }
+    .icon-btn.active { border-color: var(--acc-glow); color: var(--acc); background: var(--acc-dim); }
+    .icon-btn.alert-state { border-color: var(--red); color: var(--red); animation: alert-pulse 1.5s ease infinite; }
+    @keyframes alert-pulse { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 12px rgba(239,68,68,0.4)} }
+
+    .badge {
+      position: absolute;
+      top: -4px; right: -4px;
+      min-width: 16px; height: 16px;
+      border-radius: 8px;
+      background: var(--red);
+      color: #fff;
+      font-size: 0.6rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 3px;
+      border: 2px solid var(--bg);
+    }
+
+    /* ═══ STATS STRIP ═══ */
+    .stats-strip {
+      position: absolute;
+      top: 68px; left: 1rem; right: 1rem;
+      z-index: 100;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .stat-pill {
+      display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.7rem;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bord2);
+      border-radius: 100px;
+      font-size: 0.72rem;
+      color: var(--muted2);
+      font-family: 'Space Mono', monospace;
+    }
+    .stat-pill .val { color: var(--acc); font-weight: 700; }
+
+    /* ═══ FAB (main action) ═══ */
+    .fab-wrap {
+      position: absolute;
+      bottom: 100px; right: 1rem;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .fab {
+      width: 56px; height: 56px;
+      border-radius: 16px;
+      border: none;
+      background: var(--acc);
+      color: #0a0d12;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 24px rgba(245,158,11,0.4), 0 0 0 1px rgba(245,158,11,0.2);
+      transition: all 0.2s;
+    }
+    .fab:active { transform: scale(0.9); box-shadow: 0 2px 12px rgba(245,158,11,0.3); }
+    .fab.active {
+      background: var(--red);
+      box-shadow: 0 4px 24px rgba(239,68,68,0.4);
+    }
+    .fab-label {
+      font-size: 0.6rem;
+      font-family: 'Space Mono', monospace;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    /* ═══ BOTTOM DOCK ═══ */
+    .dock {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      z-index: 200;
+      padding: 0.6rem 1rem;
+      padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(10,13,18,0.97) 0%, transparent 100%);
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .dock-btn {
+      flex: 1;
+      padding: 0.65rem 0.5rem;
+      border-radius: 12px;
+      border: 1px solid var(--bord);
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      color: var(--muted2);
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .dock-btn .di { font-size: 1.1rem; }
+    .dock-btn:active, .dock-btn.active {
+      border-color: var(--acc-glow);
+      background: var(--acc-dim);
+      color: var(--acc);
+    }
+
+    /* ═══ PLACE MODE INDICATOR ═══ */
+    .place-mode-bar {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 300;
+      background: var(--glass2);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 16px;
+      padding: 1rem 1.5rem;
+      text-align: center;
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+    .place-mode-bar.show { display: block; }
+    .place-mode-bar .pm-icon { font-size: 2rem; margin-bottom: 0.4rem; }
+    .place-mode-bar .pm-text { font-size: 0.9rem; color: var(--text); font-weight: 500; }
+    .place-mode-bar .pm-sub  { font-size: 0.72rem; color: var(--muted2); margin-top: 0.2rem; }
+    @keyframes fadeIn { from{opacity:0;transform:translate(-50%,-52%)} to{opacity:1;transform:translate(-50%,-50%)} }
+
+    /* Crosshair */
+    .crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 250;
+      pointer-events: none;
+      display: none;
+    }
+    .crosshair.show { display: block; }
+    .crosshair::before, .crosshair::after {
+      content: '';
+      position: absolute;
+      background: var(--acc);
+    }
+    .crosshair::before { width: 2px; height: 24px; top: -12px; left: -1px; }
+    .crosshair::after  { width: 24px; height: 2px; top: -1px; left: -12px; }
+
+    /* ═══ DRAWER (slide up panel) ═══ */
+    .drawer-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 400;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .drawer-overlay.show { opacity: 1; pointer-events: all; }
+
+    .drawer {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      z-index: 500;
+      background: var(--sur);
+      border-top-left-radius: 22px;
+      border-top-right-radius: 22px;
+      border-top: 1px solid var(--bord2);
+      max-height: 70vh;
+      transform: translateY(100%);
+      transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+      display: flex;
+      flex-direction: column;
+    }
+    .drawer.open { transform: translateY(0); }
+
+    .drawer-handle {
+      width: 36px; height: 4px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.15);
+      margin: 0.75rem auto 0;
+      flex-shrink: 0;
+    }
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--bord);
+      flex-shrink: 0;
+    }
+    .drawer-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--acc);
+      letter-spacing: 0.05em;
+      flex: 1;
+    }
+    .drawer-close {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      border: 1px solid var(--bord);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem 1.5rem;
+    }
+
+    /* ═══ CARDS IN DRAWER ═══ */
+    .spot-card {
+      background: var(--card);
+      border: 1px solid var(--bord);
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: border-color 0.2s;
+    }
+    .spot-card:active { border-color: var(--acc-glow); }
+    .sc-icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: var(--acc-dim);
+      border: 1px solid var(--acc-glow);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .sc-info { flex: 1; min-width: 0; }
+    .sc-name {
+      font-weight: 600; font-size: 0.9rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .sc-detail { font-size: 0.72rem; color: var(--muted2); margin-top: 2px; }
+    .sc-tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 100px;
+      background: var(--acc-dim);
+      border: 1px solid var(--acc-glow);
+      color: var(--acc);
+      font-size: 0.65rem;
+      font-weight: 600;
+      font-family: 'Space Mono', monospace;
+    }
+    .sc-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+    .sc-btn {
+      height: 32px;
+      padding: 0 0.7rem;
+      border-radius: 8px;
+      border: 1px solid var(--bord2);
+      background: var(--card2);
+      color: var(--muted2);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .sc-btn.primary   { background: var(--acc); border-color: var(--acc); color: #0a0d12; }
+    .sc-btn.success   { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.4); color: var(--green); }
+    .sc-btn.navigate  { background: rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.3); color: var(--cyan); }
+    .sc-btn.danger    { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: var(--red); }
+    .sc-btn:active { opacity: 0.75; transform: scale(0.95); }
+
+    /* Status pills */
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 3px 8px;
+      border-radius: 100px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      font-family: 'Space Mono', monospace;
+    }
+    .status-pill.pending  { background: rgba(245,158,11,0.1); color: var(--acc); border: 1px solid var(--acc-glow); }
+    .status-pill.accepted { background: rgba(16,185,129,0.1); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .status-pill.now      { background: rgba(16,185,129,0.2); color: var(--green); border: 1px solid rgba(16,185,129,0.4); animation: glow-green 1.5s ease infinite; }
+    .status-pill.completed{ background: rgba(34,211,238,0.1); color: var(--cyan); border: 1px solid rgba(34,211,238,0.3); }
+    @keyframes glow-green { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 8px rgba(16,185,129,0.5)} }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .empty-state .es-icon { font-size: 2.5rem; margin-bottom: 0.6rem; opacity: 0.5; }
+
+    /* Spot Detail Modal Mini-Map */
+    #spotDetailMap {
+      width: 100%;
+      height: 160px;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      border: 1px solid var(--bord2);
+    }
+    .spot-detail-header {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .spot-detail-avatar {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--acc), #f472b6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; font-weight: 700;
+      flex-shrink: 0;
+      overflow: hidden;
+      border: 1px solid var(--acc-glow);
+    }
+    .spot-detail-avatar img { width:100%; height:100%; object-fit:cover; border-radius:12px; }
+    .spot-detail-divider {
+      height: 1px;
+      background: var(--bord);
+      margin: 0.75rem 0;
+    }
+    .spot-detail-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ═══ MODAL ═══ */
+    .modal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 600;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal {
+      width: 100%;
+      max-width: 480px;
+      background: var(--sur);
+      border-top-left-radius: 22px;
+      border-top-right-radius: 22px;
+      border-top: 1px solid var(--bord2);
+      padding: 1.25rem 1.25rem;
+      padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+      transform: translateY(30px);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .modal-overlay.show .modal { transform: translateY(0); }
+    .modal-handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.15); margin: 0 auto 1rem; }
+    .modal-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--acc);
+      margin-bottom: 1rem;
+      letter-spacing: 0.04em;
+    }
+    .finp {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      background: var(--card);
+      border: 1px solid var(--bord2);
+      border-radius: 11px;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.92rem;
+      outline: none;
+      margin-bottom: 0.6rem;
+      transition: border-color 0.2s;
+    }
+    .finp:focus { border-color: rgba(245,158,11,0.5); }
+    .finp-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.3rem; display: block; font-weight: 500; }
+    .modal-actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
+    .modal-actions button { flex: 1; }
+    .btn-primary {
+      padding: 0.8rem;
+      border-radius: 12px;
+      border: none;
+      background: var(--acc);
+      color: #0a0d12;
+      font-weight: 700;
+      font-size: 0.9rem;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn-primary:active { opacity: 0.8; }
+    .btn-ghost {
+      padding: 0.8rem;
+      border-radius: 12px;
+      border: 1px solid var(--bord2);
+      background: transparent;
+      color: var(--muted2);
+      font-weight: 600;
+      font-size: 0.9rem;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+    }
+    .btn-ghost:active { background: var(--card); }
+
+    /* ═══ MATCH OVERLAY ═══ */
+    .match-screen {
+      position: absolute;
+      inset: 0;
+      z-index: 800;
+      background: rgba(10,13,18,0.96);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+    .match-screen.show { display: flex; animation: matchIn 0.4s ease; }
+    @keyframes matchIn { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+    .match-ring {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      border: 2px solid var(--acc-glow);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3.5rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+      animation: spin-ring 4s linear infinite;
+    }
+    .match-ring::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px solid transparent;
+      border-top-color: var(--acc);
+      animation: spin-ring 1.5s linear infinite;
+    }
+    @keyframes spin-ring { to { transform: rotate(360deg); } }
+    .match-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: var(--acc);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .match-name { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .match-spot { font-size: 0.85rem; color: var(--muted2); margin-bottom: 2rem; }
+    .match-btn {
+      padding: 0.9rem 2.5rem;
+      border-radius: 14px;
+      border: none;
+      background: var(--acc);
+      color: #0a0d12;
+      font-weight: 700;
+      font-size: 1rem;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+    }
+
+    /* ═══ TOAST ═══ */
+    .toast {
+      position: absolute;
+      bottom: 90px; left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--glass2);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--bord2);
+      border-radius: 100px;
+      padding: 0.5rem 1.2rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      z-index: 900;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ═══ CUSTOM MARKERS ═══ */
+    .my-spot-marker {
+      width: 20px; height: 20px;
+      background: var(--acc);
+      border-radius: 50%;
+      border: 2.5px solid rgba(255,255,255,0.9);
+      box-shadow: 0 0 12px rgba(245,158,11,0.6);
+    }
+    .other-spot-marker {
+      width: 16px; height: 16px;
+      background: var(--muted);
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.5);
+      position: relative;
+    }
+    /* Online-Puls: kleiner grüner Ring oben rechts am Spot-Marker */
+    .other-spot-marker.is-online::after {
+      content: '';
+      position: absolute;
+      top: -3px; right: -3px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 1.5px solid var(--bg);
+      box-shadow: 0 0 6px rgba(16,185,129,0.8);
+      animation: online-pulse 2s ease infinite;
+    }
+    @keyframes online-pulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.4); opacity: 0.6; }
+    }
+    .user-marker {
+      width: 14px; height: 14px;
+      background: var(--cyan);
+      border-radius: 50%;
+      border: 2.5px solid #fff;
+      box-shadow: 0 0 10px rgba(34,211,238,0.6);
+    }
+
+    /* Leaflet popup custom buttons */
+    .pop-btn {
+      display: inline-block;
+      margin: 4px 3px 0 0;
+      padding: 4px 10px;
+      border-radius: 7px;
+      border: none;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+    }
+    .pop-btn.inv { background: var(--acc); color: #0a0d12; }
+    .pop-btn.nav { background: rgba(34,211,238,0.2); color: var(--cyan); border: 1px solid rgba(34,211,238,0.4); }
+    .pop-btn.del { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+    /* Profile modal */
+    .profile-avatar-lg {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--acc), #f472b6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; font-weight: 700;
+      margin: 0 auto 0.75rem;
+      overflow: hidden;
+      border: 2px solid var(--acc-glow);
+    }
+    .profile-avatar-lg img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .profile-chip {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 4px 10px;
+      border-radius: 100px;
+      background: var(--acc-dim);
+      border: 1px solid var(--acc-glow);
+      color: var(--acc);
+      font-size: 0.7rem;
+      font-weight: 500;
+      margin: 2px;
+    }
+    .profile-chip.offer {
+      background: rgba(34,211,238,0.08);
+      border-color: rgba(34,211,238,0.25);
+      color: var(--cyan);
+    }
+
+    /* Radius choice buttons */
+    .radius-choice {
+      padding: 0.75rem 0.5rem;
+      border-radius: 12px;
+      border: 1px solid var(--bord2);
+      background: var(--card);
+      color: var(--muted2);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .radius-choice:active,
+    .radius-choice.selected {
+      background: var(--acc-dim);
+      border-color: var(--acc-glow);
+      color: var(--acc);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- Crosshair (place mode) -->
+<div class="crosshair" id="crosshair"></div>
+
+<!-- Place mode overlay -->
+<div class="place-mode-bar" id="placeModeBar">
+  <div class="pm-icon">📍</div>
+  <div class="pm-text">Spot platzieren</div>
+  <div class="pm-sub">Tippe auf die Karte</div>
+</div>
+
+<!-- TOP BAR -->
+<div class="topbar" id="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    SPOT<span style="color:var(--text);font-weight:400">ME</span>
+    <span class="logo-sub">Caching</span>
+  </div>
+  <button class="icon-btn" onclick="location.href='index.html'" title="Zurück">‹</button>
+  <button class="icon-btn" onclick="location.href='profil-caching.html'" title="Profil">👤</button>
+  <button class="icon-btn" id="inviteHeaderBtn" onclick="openDrawer('invites')" title="Einladungen">
+    📨
+    <span class="badge" id="inviteBadge" style="display:none">0</span>
+  </button>
+  <button class="icon-btn" onclick="location.reload()" title="Aktualisieren">↺</button>
+</div>
+
+<!-- STATS STRIP -->
+<div class="stats-strip">
+  <div class="stat-pill">
+    <span>SPOTS</span>
+    <span class="val" id="statSpots">0</span>
+  </div>
+  <div class="stat-pill">
+    <span>INVITES</span>
+    <span class="val" id="statInvites">0</span>
+  </div>
+</div>
+
+<!-- FAB -->
+<div class="fab-wrap">
+  <button class="fab" id="fabBtn" onclick="togglePlaceMode()">📍</button>
+  <span class="fab-label" id="fabLabel">SPOT</span>
+</div>
+
+<!-- BOTTOM DOCK -->
+<div class="dock" id="dock">
+  <button class="dock-btn" onclick="openDrawer('myspots')">
+    <span class="di">🟠</span>
+    Meine Spots
+  </button>
+  <button class="dock-btn" onclick="openDrawer('all')">
+    <span class="di">🌐</span>
+    Alle Spots
+  </button>
+  <button class="dock-btn" onclick="openDrawer('invites')">
+    <span class="di">📨</span>
+    Einladungen
+  </button>
+  <button class="dock-btn" id="radiusBtn" onclick="openRadiusSearch()">
+    <span class="di">🔍</span>
+    Radius
+  </button>
+</div>
+
+<!-- DRAWER OVERLAY -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+
+<!-- DRAWER -->
+<div class="drawer" id="drawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-head">
+    <div class="drawer-title" id="drawerTitle">Spots</div>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</div>
+
+<!-- SPOT FORM MODAL -->
+<div class="modal-overlay" id="spotModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📍 Spot anlegen</div>
+    <span class="finp-label">Name</span>
+    <input id="spotName" class="finp" placeholder="z.B. Schöner Brunnen" maxlength="50">
+    <span class="finp-label">Beschreibung (optional)</span>
+    <input id="spotDesc" class="finp" placeholder="Kurze Beschreibung…" maxlength="100">
+    <span class="finp-label">Wunsch-Tag</span>
+    <select id="spotWish" class="finp"></select>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModals()">Abbrechen</button>
+      <button class="btn-primary" onclick="saveSpot()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- INVITE MODAL -->
+<div class="modal-overlay" id="inviteModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📨 Einladung senden</div>
+    <div id="inviteSpotInfo" style="font-size:0.85rem;color:var(--muted2);margin-bottom:0.8rem;"></div>
+    <span class="finp-label">Von</span>
+    <input type="datetime-local" id="inviteStart" class="finp">
+    <span class="finp-label">Bis</span>
+    <input type="datetime-local" id="inviteEnd" class="finp">
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModals()">Abbrechen</button>
+      <button class="btn-primary" onclick="sendInvite()">Senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- SPOT DETAIL MODAL -->
+<div class="modal-overlay" id="spotDetailModal" style="z-index:650;">
+  <div class="modal" style="max-height:88vh;overflow-y:auto;padding-bottom:max(1.5rem,env(safe-area-inset-bottom));">
+    <div class="modal-handle"></div>
+    <div id="spotDetailMap"></div>
+    <div id="spotDetailContent">
+      <div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.5rem;">
+      <button class="btn-ghost" style="flex:1;" onclick="closeModals()">Schließen</button>
+      <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn" onclick="confirmInviteFromDetail()">📨 Einladung senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal" style="z-index:700;">
+  <div class="modal" style="max-height:80vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div id="profileModalContent">
+      <div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>
+    </div>
+    <div style="margin-top:1rem;">
+      <button class="btn-ghost" style="width:100%;" onclick="closeModals()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- RADIUS MODAL -->
+<div class="modal-overlay" id="radiusModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔍 Radius-Suche</div>
+    <p style="font-size:0.82rem;color:var(--muted2);margin-bottom:1rem;">Zeigt alle Spots anderer Profile in deiner Umgebung.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.8rem;">
+      <button class="radius-choice" data-km="2"  onclick="selectRadius(2)">2 km</button>
+      <button class="radius-choice" data-km="5"  onclick="selectRadius(5)">5 km</button>
+      <button class="radius-choice" data-km="10" onclick="selectRadius(10)">10 km</button>
+    </div>
+    <div id="radiusResult" style="font-size:0.8rem;color:var(--muted2);text-align:center;min-height:1.2rem;"></div>
+    <div class="modal-actions" style="margin-top:0.8rem;">
+      <button class="btn-ghost" onclick="clearRadius(); closeModals()">✕ Löschen</button>
+      <button class="btn-primary" onclick="closeModals()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MATCH SCREEN -->
+<div class="match-screen" id="matchScreen">
+  <div class="match-ring">🎯</div>
+  <div class="match-label">Match gefunden</div>
+  <div class="match-name" id="matchName"></div>
+  <div class="match-spot" id="matchSpot"></div>
+  <button class="match-btn" onclick="closeMatch()">✨ Weiter</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+
+// Globale Funktionen für Leaflet Popup-onclick
+// (müssen vor map.on('click') und renderMarkers verfügbar sein)
+var showSpotOwnerProfile, openInviteFromSpot, navigateToSpot, deleteSpot;
+
+window.addEventListener('load', () => {
+  // Nach initMap() reassignen damit Leaflet-Popups immer aktuell sind
+  window.showSpotOwnerProfile = (...a) => showSpotOwnerProfile(...a);
+  window.openInviteFromSpot   = (...a) => openInviteFromSpot(...a);
+  window.navigateToSpot       = (...a) => navigateToSpot(...a);
+  window.deleteSpot           = (...a) => deleteSpot(...a);
+  window.openSpotDetail       = (...a) => openSpotDetail(...a);
+});
+
+const API  = 'https://spotme-chat-obom.onrender.com/api';
+const CODE = localStorage.getItem('sm_code') || '000000';
+
+let map, userPos, placeMode = false, tempLatLng = null;
+let mySpots = [], allSpots = [];
+let onlineSet = new Set();
+let selectedInviteSpot = null;
+let invitePollInterval = null;
+let knownInviteCount   = 0;
+let toastTimer, currentDrawer = null;
+
+// ─── MAP INIT ────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', { zoomControl: false, attributionControl: false, tap: false })
+         .setView([39.47, -0.38], 14);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OSM',
+    opacity: 0.72
+  }).addTo(map);
+
+  navigator.geolocation?.getCurrentPosition(pos => {
+    userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    L.marker([userPos.lat, userPos.lng], {
+      icon: L.divIcon({ html:'<div class="user-marker"></div>', iconSize:[14,14], className:'' })
+    }).addTo(map).bindPopup('<b style="color:#22d3ee;">📍 Du</b>');
+    map.setView([userPos.lat, userPos.lng], 15);
+    // Standort wird NICHT an Server gesendet (Datenschutz)
+    // Nur Heartbeat für Online-Status
+  });
+
+  map.on('click', e => {
+    if (placeMode) {
+      tempLatLng = e.latlng;
+      L.circleMarker([e.latlng.lat, e.latlng.lng], {
+        radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
+      }).addTo(map);
+      placeMode = false;
+      hidePlaceModeUI();
+      openSpotForm();
+    } else {
+      if (currentDrawer) closeDrawer();
+    }
+  });
+
+  // Drawer + Modals: Touch-Events nicht zur Karte durchlassen
+  ['drawer', 'drawerOverlay'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    el.addEventListener('click',      e => e.stopPropagation());
+  });
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    el.addEventListener('click',      e => e.stopPropagation());
+  });
+
+  loadAllSpots();
+  startInvitePolling();
+  if ('Notification' in window) Notification.requestPermission();
+}
+
+// ─── SPOTS ───────────────────────────────────────────────────────────────────
+async function loadAllSpots() {
+  try {
+    const r = await fetch(API+'/userspots/all');
+    if (r.ok) allSpots = await r.json();
+  } catch {
+    allSpots = [
+      { id:101, code:'111111', lat:39.473, lng:-0.377, name:'Geheimer Garten', wishTag:'Park',        createdAt: Date.now() - 8*60000 },
+      { id:102, code:'222222', lat:39.469, lng:-0.381, name:'Sonnenplatz',      wishTag:'Kaffee',      createdAt: Date.now() - 3*3600000 },
+      { id:103, code:'333333', lat:39.471, lng:-0.374, name:'Aussichtspunkt',   wishTag:'Spaziergang', createdAt: Date.now() - 26*3600000 }
+    ];
+  }
+  mySpots = allSpots.filter(s => s.code === CODE);
+  document.getElementById('statSpots').textContent = mySpots.length;
+  renderMarkers();
+}
+
+async function renderMarkers() {
+  map.eachLayer(l => { if (l._spotMarker) map.removeLayer(l); });
+
+  // Online-Status für alle Fremd-Spots parallel abfragen
+  onlineSet = new Set();
+  const others = allSpots.filter(s => s.code !== CODE);
+  await Promise.all(others.map(async s => {
+    try {
+      const r = await fetch(`${API}/online/${s.code}?spot=caching`);
+      if (r.ok) {
+        const d = await r.json();
+        if (d.online) onlineSet.add(s.code);
+      }
+    } catch {}
+  }));
+
+  allSpots.forEach(s => {
+    const isMine   = s.code === CODE;
+    const isOnline = !isMine && onlineSet.has(s.code);
+    const markerClass = isMine
+      ? 'my-spot-marker'
+      : `other-spot-marker${isOnline ? ' is-online' : ''}`;
+
+    const m = L.marker([s.lat, s.lng], {
+      icon: L.divIcon({
+        html: `<div class="${markerClass}"></div>`,
+        iconSize: isMine ? [20,20] : [16,16],
+        className: ''
+      })
+    }).addTo(map);
+    m._spotMarker = true;
+
+    // Kein bindPopup — Drawer öffnen
+    m.on('click', () => openMarkerDrawer(s, isMine, isOnline));
+  });
+}
+
+function openMarkerDrawer(s, isMine, isOnline) {
+  document.getElementById('drawerOverlay').classList.add('show');
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerTitle').textContent = isMine ? 'MEIN SPOT' : 'SPOT';
+  currentDrawer = 'marker';
+
+  const onlineBadge = isOnline
+    ? `<span style="font-size:0.72rem;color:var(--green);font-weight:600;font-family:'Space Mono',monospace;">● Online</span>`
+    : `<span style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;">○ Offline</span>`;
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="spot-card" style="margin-bottom:1rem;">
+      <div class="sc-icon">${isMine ? '🟠' : '📍'}</div>
+      <div class="sc-info">
+        <div class="sc-name">${esc(s.name)}</div>
+        <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+          <span class="sc-tag">${s.wishTag || ''}</span>
+          ${onlineBadge}
+          ${spotAgeHtml(s.createdAt || s.created_at)}
+        </div>
+      </div>
+    </div>
+    ${isMine
+      ? `<button id="md-del" class="sc-btn danger" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">🗑️ Spot löschen</button>`
+      : `<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+           <button id="md-nav"  class="sc-btn navigate" style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">🧭 Route</button>
+           <button id="md-prof" class="sc-btn"          style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">👤 Profil</button>
+         </div>
+         <button id="md-det" class="sc-btn primary" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">📋 Details & Einladung</button>`
+    }
+  `;
+
+  if (isMine) {
+    document.getElementById('md-del').addEventListener('click', () => {
+      deleteSpot(s.id); closeDrawer();
+    });
+  } else {
+    document.getElementById('md-nav').addEventListener('click', () => {
+      navigateToSpot(s.lat, s.lng); closeDrawer();
+    });
+    document.getElementById('md-prof').addEventListener('click', () => {
+      closeDrawer();
+      setTimeout(() => showSpotOwnerProfile(s.code), 300);
+    });
+    document.getElementById('md-det').addEventListener('click', () => {
+      closeDrawer();
+      setTimeout(() => openSpotDetail(s.id), 300);
+    });
+  }
+}
+
+// ─── PLACE MODE ──────────────────────────────────────────────────────────────
+function togglePlaceMode() {
+  placeMode = !placeMode;
+  const fab   = document.getElementById('fabBtn');
+  const label = document.getElementById('fabLabel');
+  const bar   = document.getElementById('placeModeBar');
+  const cross = document.getElementById('crosshair');
+  if (placeMode) {
+    fab.classList.add('active');
+    fab.textContent = '✕';
+    label.textContent = 'ABBRUCH';
+    bar.classList.add('show');
+    cross.classList.add('show');
+    toast('Tippe auf die Karte');
+  } else {
+    hidePlaceModeUI();
+  }
+}
+
+function hidePlaceModeUI() {
+  placeMode = false;
+  const fab   = document.getElementById('fabBtn');
+  const label = document.getElementById('fabLabel');
+  fab.classList.remove('active');
+  fab.textContent = '📍';
+  label.textContent = 'SPOT';
+  document.getElementById('placeModeBar').classList.remove('show');
+  document.getElementById('crosshair').classList.remove('show');
+}
+
+// ─── SPOT FORM ───────────────────────────────────────────────────────────────
+function openSpotForm() {
+  const profile = JSON.parse(localStorage.getItem('sm_profile_caching')||'{}');
+  const wishes = profile.wishes?.length ? profile.wishes : ['Kaffee','Strand','Park','Wandern','Kino'];
+  document.getElementById('spotWish').innerHTML = wishes.map(w=>`<option value="${w}">${w}</option>`).join('');
+  document.getElementById('spotName').value = '';
+  document.getElementById('spotDesc').value = '';
+  document.getElementById('spotModal').classList.add('show');
+}
+
+async function saveSpot() {
+  const name = document.getElementById('spotName').value.trim();
+  const desc = document.getElementById('spotDesc').value.trim();
+  const wish = document.getElementById('spotWish').value;
+  if (!name || !tempLatLng) { toast('⚠️ Name eingeben'); return; }
+  closeModals();
+  try {
+    await fetch(API+'/userspots', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code:CODE, lat:tempLatLng.lat, lng:tempLatLng.lng, name, description:desc, wishTag:wish })
+    });
+  } catch {}
+  toast('✅ Spot gespeichert');
+  loadAllSpots();
+}
+
+async function deleteSpot(id) {
+  map.closePopup();
+  try { await fetch(API+'/userspots/'+id, { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code:CODE}) }); }
+  catch {}
+  toast('🗑️ Spot gelöscht');
+  loadAllSpots();
+}
+
+// ─── NAVIGATION (OSM) ────────────────────────────────────────────────────────
+function navigateToSpot(lat, lng) {
+  // Alten Nav-Toast entfernen
+  const old = document.getElementById('navToast');
+  if (old) old.remove();
+
+  map.setView([lat, lng], 17);
+
+  if (!userPos) {
+    toast('📍 Spot auf Karte angezeigt');
+    return;
+  }
+
+  const dist  = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng) * 1000);
+  const angle = Math.atan2(lng - userPos.lng, lat - userPos.lat) * 180 / Math.PI;
+  const dirs  = ['↑ N','↗ NO','→ O','↘ SO','↓ S','↙ SW','← W','↖ NW'];
+  const dir   = dirs[((Math.round(angle / 45) % 8) + 8) % 8];
+  const distLabel = dist < 1000 ? `${dist}m` : `${(dist/1000).toFixed(1)}km`;
+
+  // OSM-basierte Navigation via osmand:// oder Brouter oder plain OSM
+  const osmUrl = `https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
+
+  showNavToast(dir, distLabel, osmUrl);
+}
+
+// ─── DRAWER ───────────────────────────────────────────────────────────────────
+function openDrawer(type) {
+  currentDrawer = type;
+  const drawer  = document.getElementById('drawer');
+  const overlay = document.getElementById('drawerOverlay');
+  const title   = document.getElementById('drawerTitle');
+  const body    = document.getElementById('drawerBody');
+
+  overlay.classList.add('show');
+  drawer.classList.add('open');
+
+  if (type === 'myspots') {
+    title.textContent = 'MEINE SPOTS';
+    body.innerHTML = mySpots.length
+      ? mySpots.map(s=>`
+        <div class="spot-card">
+          <div class="sc-icon">🟠</div>
+          <div class="sc-info">
+            <div class="sc-name">${esc(s.name)}</div>
+            <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px;">
+              <span class="sc-tag">${s.wishTag}</span>
+              ${spotAgeHtml(s.createdAt || s.created_at)}
+            </div>
+          </div>
+          <div class="sc-actions">
+            <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
+            <button class="sc-btn danger"   onclick="deleteSpot(${s.id}); closeDrawer()">🗑️</button>
+          </div>
+        </div>`).join('')
+      : `<div class="empty-state"><div class="es-icon">🗺️</div>Noch keine eigenen Spots.<br>Tippe auf 📍 um loszulegen.</div>`;
+  }
+
+  else if (type === 'all') {
+    title.textContent = 'ALLE SPOTS';
+    const others = allSpots.filter(s => s.code !== CODE);
+    body.innerHTML = others.length
+      ? others.map(s=>`
+        <div class="spot-card">
+          <div class="sc-icon" style="position:relative;">⚪
+            ${onlineSet?.has(s.code) ? '<span style="position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#10b981;border:1.5px solid var(--bg);box-shadow:0 0 6px rgba(16,185,129,0.8);"></span>' : ''}
+          </div>
+          <div class="sc-info">
+            <div class="sc-name">${esc(s.name)}</div>
+            <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px;">
+              <span class="sc-tag">${s.wishTag}</span>
+              ${onlineSet?.has(s.code) ? '<span style="font-size:0.65rem;color:#10b981;font-weight:600;">● Online</span>' : ''}
+              ${spotAgeHtml(s.createdAt || s.created_at)}
+            </div>
+          </div>
+          <div class="sc-actions">
+            <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
+            <button class="sc-btn primary"  onclick="openSpotDetail(${s.id})">📋</button>
+          </div>
+        </div>`).join('')
+      : `<div class="empty-state"><div class="es-icon">🌐</div>Keine Spots in der Nähe.</div>`;
+  }
+
+  else if (type === 'invites') {
+    title.textContent = 'EINLADUNGEN';
+    loadInvitesIntoDrawer(body);
+  }
+}
+
+async function loadInvitesIntoDrawer(body) {
+  body.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+  let invites = [];
+  try {
+    const r = await fetch(API+'/spotcache/invites/'+CODE);
+    if (r.ok) invites = await r.json();
+  } catch {
+    invites = [
+      { id:1, spotName:'Sonnenplatz', wishTag:'Kaffee', from:'222222', to:CODE, status:'pending',  timeStart:Date.now()+3600000,  timeEnd:Date.now()+7200000 },
+      { id:2, spotName:'Aussichtspunkt', wishTag:'Spaziergang', from:CODE, to:'333333', status:'accepted', timeStart:Date.now()+86400000, timeEnd:Date.now()+90000000 }
+    ];
+  }
+
+  knownInviteCount = invites.length;
+  document.getElementById('statInvites').textContent = invites.length;
+  updateInviteBadge(0);
+
+  const hdr = document.getElementById('inviteHeaderBtn');
+  hdr.classList.remove('alert-state');
+
+  if (!invites.length) {
+    body.innerHTML = `<div class="empty-state"><div class="es-icon">📨</div>Keine Einladungen.</div>`;
+    return;
+  }
+
+  body.innerHTML = invites.map(inv => {
+    const isSender = inv.from === CODE;
+    const now      = Date.now();
+    let statusHtml = '';
+    if (inv.status === 'pending')   statusHtml = `<span class="status-pill pending">⏳ Ausstehend</span>`;
+    if (inv.status === 'accepted') {
+      const isNow = inv.timeStart <= now && inv.timeEnd >= now;
+      statusHtml  = isNow
+        ? `<span class="status-pill now">🟢 JETZT!</span>`
+        : `<span class="status-pill accepted">✅ Akzeptiert</span>`;
+    }
+    if (inv.status === 'completed') statusHtml = `<span class="status-pill completed">🎉 Getroffen</span>`;
+
+    const countdown = inv.timeStart > now
+      ? `<span style="font-size:0.65rem;color:var(--muted);">⏰ ${formatCountdown(inv.timeStart)}</span>`
+      : '';
+
+    return `<div class="spot-card">
+      <div class="sc-icon">${isSender ? '📤' : '📨'}</div>
+      <div class="sc-info">
+        <div class="sc-name">${esc(inv.spotName)} <span style="font-size:0.7rem;font-weight:400;color:var(--muted2);">${inv.wishTag}</span></div>
+        <div class="sc-detail" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+          ${statusHtml} ${countdown}
+        </div>
+        <div class="sc-detail" style="margin-top:3px;">${formatDateTime(inv.timeStart)} – ${formatDateTime(inv.timeEnd)}</div>
+      </div>
+      <div class="sc-actions">
+        ${inv.status==='pending' && !isSender
+          ? `<button class="sc-btn success" onclick="acceptInvite(${inv.id})">✅</button>`
+          : ''}
+        ${inv.status==='accepted'
+          ? `<button class="sc-btn navigate" onclick="navigateToInviteSpot(${inv.spotId||inv.spot_id||'null'}, ${inv.lat||'null'}, ${inv.lng||'null'})">🧭</button>
+             <button class="sc-btn primary"  onclick="checkIn(${inv.id})">📍</button>`
+          : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('show');
+  currentDrawer = null;
+}
+
+// ─── SPOT DETAIL (vor Einladung) ─────────────────────────────────────────────
+let detailSpot = null;
+let detailMiniMap = null;
+
+async function openSpotDetail(spotId) {
+  const spot = allSpots.find(s => s.id === spotId);
+  if (!spot) { toast('⚠️ Spot nicht gefunden'); return; }
+  detailSpot = spot;
+
+  document.getElementById('spotDetailContent').innerHTML =
+    `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+  document.getElementById('spotDetailModal').classList.add('show');
+  map.closePopup();
+  closeDrawer();
+
+  // Mini-Map initialisieren oder updaten
+  const mapEl = document.getElementById('spotDetailMap');
+  if (detailMiniMap) {
+    detailMiniMap.remove();
+    detailMiniMap = null;
+  }
+  mapEl.style.display = 'block';
+  setTimeout(() => {
+    detailMiniMap = L.map('spotDetailMap', {
+      zoomControl: false, attributionControl: false,
+      dragging: false, scrollWheelZoom: false,
+      doubleClickZoom: false, touchZoom: false,
+      tap: false
+    }).setView([spot.lat, spot.lng], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, opacity: 0.75
+    }).addTo(detailMiniMap);
+
+    L.marker([spot.lat, spot.lng], {
+      icon: L.divIcon({
+        html: '<div class="my-spot-marker"></div>',
+        iconSize: [20,20], className: ''
+      })
+    }).addTo(detailMiniMap);
+
+    // Eigene Position wenn vorhanden
+    if (userPos) {
+      L.marker([userPos.lat, userPos.lng], {
+        icon: L.divIcon({
+          html: '<div class="user-marker"></div>',
+          iconSize: [14,14], className: ''
+        })
+      }).addTo(detailMiniMap);
+
+      detailMiniMap.fitBounds(
+        [[spot.lat, spot.lng], [userPos.lat, userPos.lng]],
+        { padding: [24, 24] }
+      );
+    }
+
+    // Mini-Map Touch-Events komplett blockieren
+    const mapEl = document.getElementById('spotDetailMap');
+    mapEl.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    mapEl.style.pointerEvents = 'none'; // rein dekorativ, keine Interaktion
+  }, 100);
+
+  // Profil + Online-Status parallel laden
+  const isOnline = onlineSet.has(spot.code);
+  let profile = null, avatarData = null;
+  try {
+    const [pRes, aRes] = await Promise.all([
+      fetch(`${API}/profile/${spot.code}?spot=caching`),
+      fetch(`${API}/avatar/${spot.code}?spot=caching`)
+    ]);
+    if (pRes.ok) profile = await pRes.json();
+    if (aRes.ok) avatarData = await aRes.json();
+  } catch {}
+
+  const dist = userPos
+    ? (() => {
+        const d = Math.round(haversineKm(userPos.lat, userPos.lng, spot.lat, spot.lng) * 1000);
+        return d < 1000 ? `${d}m` : `${(d/1000).toFixed(1)}km`;
+      })()
+    : null;
+
+  const initial    = profile?.name?.[0]?.toUpperCase() || '?';
+  const avatarHtml = avatarData?.avatar
+    ? `<img src="${avatarData.avatar}" alt="">`
+    : initial;
+
+  const wishes = (profile?.wishTags || profile?.wishes || []).filter(Boolean);
+  const offers = (profile?.offerTags || profile?.offers || []).filter(Boolean);
+
+  document.getElementById('spotDetailContent').innerHTML = `
+    <div class="spot-detail-header">
+      <div class="spot-detail-avatar">${avatarHtml}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:1rem;">${esc(spot.name)}</div>
+        <div style="font-size:0.78rem;color:var(--muted2);margin-top:2px;">
+          ${profile?.name ? `👤 ${esc(profile.name)}` : ''}
+          ${profile?.age ? `· ${profile.age} J.` : ''}
+        </div>
+        <div class="spot-detail-row" style="margin-top:4px;">
+          <span class="sc-tag">${spot.wishTag}</span>
+          ${isOnline
+            ? `<span style="font-size:0.68rem;color:var(--green);font-weight:600;font-family:'Space Mono',monospace;">● Online</span>`
+            : `<span style="font-size:0.68rem;color:var(--muted);font-family:'Space Mono',monospace;">○ Offline</span>`}
+          ${spotAgeHtml(spot.createdAt || spot.created_at)}
+        </div>
+      </div>
+    </div>
+
+    ${dist ? `<div style="font-size:0.78rem;color:var(--muted2);margin-bottom:0.5rem;">📍 ${dist} von dir entfernt</div>` : ''}
+
+    ${profile?.bio ? `
+      <div style="font-size:0.82rem;color:var(--muted2);line-height:1.55;padding:0.65rem 0.75rem;background:var(--card);border-radius:10px;border:1px solid var(--bord);margin-bottom:0.6rem;">
+        ${esc(profile.bio)}
+      </div>` : ''}
+
+    ${wishes.length ? `
+      <div style="margin-bottom:0.5rem;">
+        <div style="font-size:0.62rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">WÜNSCHE</div>
+        <div>${wishes.map(w=>`<span class="profile-chip">💭 ${esc(w)}</span>`).join('')}</div>
+      </div>` : ''}
+
+    ${offers.length ? `
+      <div>
+        <div style="font-size:0.62rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">BIETET</div>
+        <div>${offers.map(o=>`<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('')}</div>
+      </div>` : ''}
+  `;
+}
+
+function confirmInviteFromDetail() {
+  if (!detailSpot) return;
+  closeModals();
+  setTimeout(() => openInviteFromSpot(detailSpot.id, detailSpot.name, detailSpot.wishTag), 200);
+}
+
+// ─── INVITE ──────────────────────────────────────────────────────────────────
+function openInviteFromSpot(spotId, name, wish) {
+  selectedInviteSpot = { id:spotId, name, wish };
+  document.getElementById('inviteSpotInfo').textContent = `Spot: ${name} · ${wish}`;
+  document.getElementById('inviteStart').value = '';
+  document.getElementById('inviteEnd').value   = '';
+  document.getElementById('inviteModal').classList.add('show');
+}
+
+async function sendInvite() {
+  if (!selectedInviteSpot) return;
+  const start = new Date(document.getElementById('inviteStart').value).getTime();
+  const end   = new Date(document.getElementById('inviteEnd').value).getTime();
+  if (!start || !end) { toast('⚠️ Zeitraum wählen'); return; }
+  const spot = allSpots.find(s => s.id === selectedInviteSpot.id);
+  if (!spot) return;
+  closeModals();
+  try {
+    await fetch(API+'/spotcache/invite', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ from:CODE, to:spot.code, spotId:spot.id, timeStart:start, timeEnd:end })
+    });
+  } catch {}
+  toast('✅ Einladung gesendet');
+}
+
+async function acceptInvite(id) {
+  try {
+    await fetch(API+'/spotcache/invite/respond', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id, code:CODE, action:'accept' })
+    });
+  } catch {}
+  toast('✅ Einladung akzeptiert');
+  loadInvitesIntoDrawer(document.getElementById('drawerBody'));
+}
+
+// ─── CHECK-IN ────────────────────────────────────────────────────────────────
+async function checkIn(inviteId) {
+  if (!navigator.geolocation) { toast('❌ Kein GPS'); return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    try {
+      const r    = await fetch(API+'/spotcache/checkin', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id:inviteId, code:CODE, lat:pos.coords.latitude, lng:pos.coords.longitude })
+      });
+      const data = await r.json();
+      if (data.error) { toast('⚠️ '+data.error); return; }
+      if (data.bothCheckedIn) {
+        showMatch('Match!', 'Du hast jemanden getroffen 🎉');
+      } else {
+        toast('✅ Eingecheckt – warte auf Partner…');
+      }
+    } catch {
+      showMatch(maskCode('999999'), 'Demo-Spot');
+    }
+    loadInvitesIntoDrawer(document.getElementById('drawerBody'));
+  }, null, { enableHighAccuracy:true });
+}
+
+// ─── POLLING ─────────────────────────────────────────────────────────────────
+function startInvitePolling() {
+  if (invitePollInterval) clearInterval(invitePollInterval);
+  invitePollInterval = setInterval(async () => {
+    try {
+      const r = await fetch(API+'/spotcache/invites/'+CODE);
+      if (!r.ok) return;
+      const invites = await r.json();
+      const count   = invites.length;
+      document.getElementById('statInvites').textContent = count;
+
+      if (count > knownInviteCount && knownInviteCount >= 0) {
+        const newCount = count - knownInviteCount;
+        updateInviteBadge(newCount);
+        document.getElementById('inviteHeaderBtn').classList.add('alert-state');
+        if (Notification.permission === 'granted') {
+          new Notification('🧭 Neue Einladung!', { body:'Jemand möchte sich an deinem Spot treffen.' });
+        }
+      }
+      knownInviteCount = count;
+    } catch {}
+  }, 8000);
+}
+
+function updateInviteBadge(n) {
+  const badge = document.getElementById('inviteBadge');
+  if (n > 0) { badge.style.display = 'flex'; badge.textContent = n; }
+  else        { badge.style.display = 'none'; }
+}
+
+// ─── SPOT OWNER PROFIL ───────────────────────────────────────────────────────
+async function showSpotOwnerProfile(ownerCode) {
+  const content = document.getElementById('profileModalContent');
+  content.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+  document.getElementById('profileModal').classList.add('show');
+
+  try {
+    const [profileRes, avatarRes, verifRes] = await Promise.all([
+      fetch(`${API}/profile/${ownerCode}?spot=caching`),
+      fetch(`${API}/avatar/${ownerCode}?spot=caching`),
+      fetch(`${API}/verifications/${ownerCode}?spot=caching`)
+    ]);
+
+    const profile       = profileRes.ok  ? await profileRes.json()  : null;
+    const avatarData    = avatarRes.ok   ? await avatarRes.json()   : null;
+    const verifications = verifRes.ok    ? await verifRes.json()    : [];
+
+    if (!profile?.name) {
+      content.innerHTML = `<div class="empty-state"><div class="es-icon">👤</div>Profil nicht gefunden.</div>`;
+      return;
+    }
+
+    const personalCount = verifications.filter(v => v.type === 'personal').length;
+    const verifiedHtml  = personalCount > 0
+      ? `<div style="color:var(--green);font-size:0.78rem;font-weight:600;margin-top:4px;">✓ Persönlich getroffen · ${personalCount}×</div>`
+      : '';
+
+    const initial    = profile.name[0]?.toUpperCase() || '?';
+    const avatarHtml = avatarData?.avatar
+      ? `<img src="${avatarData.avatar}" alt="Avatar">`
+      : initial;
+
+    const wishes  = (profile.wishTags  || profile.wishes  || []).filter(Boolean);
+    const offers  = (profile.offerTags || profile.offers  || []).filter(Boolean);
+    const bio     = profile.bio || '';
+    const location = [profile.city, profile.region].filter(Boolean).join(', ');
+    const age      = profile.age ? `${profile.age} J.` : '';
+
+    const wishChips  = wishes.map(w => `<span class="profile-chip">💭 ${esc(w)}</span>`).join('');
+    const offerChips = offers.map(o => `<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('');
+
+    content.innerHTML = `
+      <div style="text-align:center;margin-bottom:1rem;">
+        <div class="profile-avatar-lg">${avatarHtml}</div>
+        <div style="font-family:'Space Mono',monospace;font-size:1rem;font-weight:700;color:var(--acc);">${esc(profile.name)}</div>
+        ${age || location ? `<div style="font-size:0.78rem;color:var(--muted2);margin-top:3px;">${[age,location].filter(Boolean).join(' · ')}</div>` : ''}
+        ${verifiedHtml}
+      </div>
+      ${wishes.length ? `<div style="margin-bottom:0.6rem;"><div style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">WÜNSCHE</div>${wishChips}</div>` : ''}
+      ${offers.length ? `<div style="margin-bottom:0.6rem;"><div style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.08em;margin-bottom:4px;">BIETET</div>${offerChips}</div>` : ''}
+      ${bio ? `<div style="font-size:0.85rem;color:var(--muted2);line-height:1.5;margin-top:0.5rem;padding:0.75rem;background:var(--card);border-radius:10px;border:1px solid var(--bord);">${esc(bio)}</div>` : ''}
+    `;
+  } catch {
+    content.innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div>Fehler beim Laden.</div>`;
+  }
+}
+
+// Einladungs-Navigation: Spot aus allSpots holen, sonst direkte Coords
+function navigateToInviteSpot(spotId, lat, lng) {
+  // Zuerst in allSpots nachschlagen
+  const spot = allSpots.find(s => s.id === spotId);
+  if (spot) {
+    map.setView([spot.lat, spot.lng], 17);
+    navigateToSpot(spot.lat, spot.lng);
+    return;
+  }
+  // Fallback: direkte Koordinaten wenn vorhanden
+  if (lat && lng) {
+    navigateToSpot(lat, lng);
+    return;
+  }
+  toast('⚠️ Spot-Koordinaten nicht verfügbar');
+}
+window.navigateToInviteSpot = navigateToInviteSpot;
+
+// ─── RADIUS SEARCH ───────────────────────────────────────────────────────────
+let radiusCircle = null, activeRadius = null;
+
+function openRadiusSearch() {
+  document.querySelectorAll('.radius-choice').forEach(b => b.classList.remove('selected'));
+  if (activeRadius) {
+    document.querySelector(`.radius-choice[data-km="${activeRadius}"]`)?.classList.add('selected');
+  }
+  document.getElementById('radiusResult').textContent = activeRadius
+    ? `Aktiver Radius: ${activeRadius} km`
+    : 'Radius wählen:';
+  document.getElementById('radiusModal').classList.add('show');
+}
+
+function selectRadius(km) {
+  if (!userPos) { toast('❌ Standort unbekannt'); return; }
+
+  // Button-Highlight
+  document.querySelectorAll('.radius-choice').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`.radius-choice[data-km="${km}"]`)?.classList.add('selected');
+  activeRadius = km;
+
+  // Alten Kreis entfernen
+  if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
+
+  const radiusM = km * 1000;
+
+  // Leaflet Circle zeichnen
+  radiusCircle = L.circle([userPos.lat, userPos.lng], {
+    radius:      radiusM,
+    color:       '#f59e0b',
+    fillColor:   '#f59e0b',
+    fillOpacity: 0.06,
+    weight:      2,
+    dashArray:   '6 4'
+  }).addTo(map);
+
+  map.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
+
+  // Spots im Radius filtern (Haversine)
+  const nearby = allSpots.filter(s => {
+    if (s.code === CODE) return false;
+    return haversineKm(userPos.lat, userPos.lng, s.lat, s.lng) <= km;
+  });
+
+  const resultEl = document.getElementById('radiusResult');
+  resultEl.textContent = `${nearby.length} Spot${nearby.length !== 1 ? 's' : ''} innerhalb ${km} km`;
+
+  // Dock-Button highlighten
+  document.getElementById('radiusBtn').classList.add('active');
+
+  // Wenn Ergebnisse: Drawer öffnen mit gefilterter Liste
+  if (nearby.length > 0) {
+    setTimeout(() => {
+      closeModals();
+      openDrawerFiltered(nearby, km);
+    }, 600);
+  }
+}
+
+function clearRadius() {
+  if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
+  activeRadius = null;
+  document.getElementById('radiusBtn').classList.remove('active');
+}
+
+function openDrawerFiltered(spots, km) {
+  const drawer  = document.getElementById('drawer');
+  const overlay = document.getElementById('drawerOverlay');
+  const title   = document.getElementById('drawerTitle');
+  const body    = document.getElementById('drawerBody');
+  overlay.classList.add('show');
+  drawer.classList.add('open');
+  currentDrawer = 'radius';
+  title.textContent = `RADIUS ${km} KM`;
+  body.innerHTML = spots.map(s => {
+    const dist = haversineKm(userPos.lat, userPos.lng, s.lat, s.lng);
+    return `<div class="spot-card">
+      <div class="sc-icon">📍</div>
+      <div class="sc-info">
+        <div class="sc-name">${esc(s.name)}</div>
+        <div class="sc-detail" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:3px;">
+          <span class="sc-tag">${s.wishTag}</span>
+          <span style="font-size:0.68rem;color:var(--muted);">~${dist < 1 ? Math.round(dist*1000)+'m' : dist.toFixed(1)+'km'}</span>
+          ${spotAgeHtml(s.createdAt || s.created_at)}
+        </div>
+      </div>
+      <div class="sc-actions">
+        <button class="sc-btn navigate" onclick="navigateToSpot(${s.lat},${s.lng})">🧭</button>
+        <button class="sc-btn primary"  onclick="openSpotDetail(${s.id})">📋</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R  = 6371;
+  const dL = (lat2 - lat1) * Math.PI / 180;
+  const dG = (lng2 - lng1) * Math.PI / 180;
+  const a  = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dG/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ─── MATCH ───────────────────────────────────────────────────────────────────
+function showMatch(name, spot) {
+  document.getElementById('matchName').textContent = name;
+  document.getElementById('matchSpot').textContent = spot;
+  document.getElementById('matchScreen').classList.add('show');
+}
+function closeMatch() { document.getElementById('matchScreen').classList.remove('show'); }
+
+// ─── MODALS ──────────────────────────────────────────────────────────────────
+function closeModals() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show'));
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function formatDateTime(ts) {
+  const d = new Date(Number(ts));
+  if (isNaN(d)) return '–';
+  return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) + ' ' +
+         d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+}
+
+function formatCountdown(ts) {
+  const diff = Number(ts) - Date.now();
+  if (diff <= 0) return 'jetzt';
+  const h = Math.floor(diff/3600000);
+  const m = Math.floor((diff%3600000)/60000);
+  if (h >= 24) return `in ${Math.floor(h/24)}d`;
+  return h > 0 ? `in ${h}h ${m}min` : `in ${m}min`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s||'');
+  return d.innerHTML;
+}
+
+function showNavToast(dir, distLabel, osmUrl) {
+  const el = document.createElement('div');
+  el.id = 'navToast';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--acc);">🧭 ${dir} · ${distLabel}</div>
+        <div style="font-size:0.68rem;color:var(--muted2);margin-top:2px;">Spot auf Karte markiert</div>
+      </div>
+      <a href="${osmUrl}" target="_blank" rel="noopener" style="
+        padding:6px 12px;border-radius:8px;
+        background:var(--acc);color:#0a0d12;
+        font-weight:700;font-size:0.75rem;
+        text-decoration:none;white-space:nowrap;flex-shrink:0;
+      ">🗺️ OSM Route</a>
+      <button onclick="document.getElementById('navToast').remove()" style="
+        background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0 2px;
+      ">✕</button>
+    </div>
+  `;
+  el.style.cssText = `
+    position:absolute;bottom:90px;left:1rem;right:1rem;
+    z-index:900;
+    background:var(--glass2);
+    backdrop-filter:blur(20px);
+    border:1px solid var(--bord2);
+    border-radius:14px;
+    padding:0.75rem 1rem;
+    animation:fadeIn 0.3s ease;
+  `;
+  document.body.appendChild(el);
+}
+
+function maskCode(c) { return c?.slice(0,3)+'…'; }
+
+// ─── SPOT ALTER ───────────────────────────────────────────────────────────────
+function spotAge(ts) {
+  if (!ts) return null;
+  const diff = Date.now() - Number(ts);
+  const min  = Math.floor(diff / 60000);
+  const h    = Math.floor(diff / 3600000);
+  const d    = Math.floor(diff / 86400000);
+  if (min < 2)   return { label: 'gerade eben', color: '#10b981', fresh: true };
+  if (min < 60)  return { label: `vor ${min} Min`,  color: '#10b981', fresh: true };
+  if (h < 6)     return { label: `vor ${h}h`,        color: '#f59e0b', fresh: false };
+  if (h < 24)    return { label: `vor ${h}h`,        color: '#94a3b8', fresh: false };
+  if (d === 1)   return { label: 'gestern',           color: '#64748b', fresh: false };
+  return           { label: `vor ${d} Tagen`,         color: '#475569', fresh: false };
+}
+
+function spotAgeHtml(ts) {
+  const a = spotAge(ts);
+  if (!a) return '';
+  return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
+}
+
+// Touch-Schutz wird in initMap() registriert (nach Leaflet-Init)
+window.addEventListener('load', initMap);
+</script>
+</body>
+</html>
