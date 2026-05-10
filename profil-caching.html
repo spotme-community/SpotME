@@ -456,7 +456,16 @@ function loadProfile() {
     showSavedBadge();
   } catch(e) { console.warn('Ladefehler', e); }
 }
-
+  
+function ensureToken() {
+  if (!localStorage.getItem('sm_token')) {
+    // 32-stelligen zufälligen Token erzeugen
+    const arr = [];
+    for (let i = 0; i < 8; i++) arr.push(Math.random().toString(36).substring(2, 6));
+    localStorage.setItem('sm_token', arr.join(''));
+  }
+  
+  }
 function saveProfile() {
   const name = document.getElementById('f-name').value.trim();
   if (!name)   { toast('⚠️ Anzeigename ist Pflicht'); return; }
@@ -497,17 +506,26 @@ function saveProfile() {
   localStorage.setItem('sm_name', name);
   
   // Auch an Server senden
-  const token = localStorage.getItem('sm_token');
-  if (token) {
-    fetch(`${API_BASE}/profile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: localStorage.getItem('sm_code'), name, spot: SPOT,
-        region: profile.region, province: profile.province, city: profile.city,
-        bio: profile.bio, wishTags: wishArray, offerTags: offerArray, token
-      })
-    }).catch(()=>{});
+ensureToken();   // ← sorgt dafür, dass immer ein Token existiert
+const token = localStorage.getItem('sm_token');
+
+// Profil IMMER an Server senden
+fetch(`${API_BASE}/profile`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    code: localStorage.getItem('sm_code'),
+    name,
+    spot: SPOT,
+    region: profile.region,
+    province: profile.province,
+    city: profile.city,
+    bio: profile.bio,
+    wishTags: wishArray,
+    offerTags: offerArray,
+    token
+  })
+}).catch(() => {});
   }
   
   showSavedBadge();
