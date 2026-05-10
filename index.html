@@ -981,6 +981,8 @@ async function loadAllSpots() {
   try {
     const r = await fetch(API+'/userspots/all');
     if (r.ok) allSpots = await r.json();
+    // Fallback: Wenn Server online aber keine Spots liefert, Demo-Daten verwenden
+    if (!allSpots || allSpots.length === 0) throw new Error('leer');
   } catch {
     allSpots = [
       { id:101, code:'111111', lat:39.473, lng:-0.377, name:'Geheimer Garten', wishTag:'Park',        createdAt: Date.now() - 8*60000 },
