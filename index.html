@@ -940,19 +940,17 @@ function initMap() {
   });
 
   map.on('click', e => {
-    if (!placeMode) return;
-    tempLatLng = e.latlng;
-    L.circleMarker([e.latlng.lat, e.latlng.lng], {
-      radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
-    }).addTo(map);
-    placeMode = false;
-    hidePlaceModeUI();
-    openSpotForm();
-  });
-
-  // Drawer schließen nur bei direktem Klick auf die Karte
-  map.on('click', () => {
-    if (currentDrawer) closeDrawer();
+    if (placeMode) {
+      tempLatLng = e.latlng;
+      L.circleMarker([e.latlng.lat, e.latlng.lng], {
+        radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
+      }).addTo(map);
+      placeMode = false;
+      hidePlaceModeUI();
+      openSpotForm();
+    } else {
+      if (currentDrawer) closeDrawer();
+    }
   });
 
   // Drawer/Overlay absichern
@@ -1055,17 +1053,34 @@ function openMarkerDrawer(s, isMine, isOnline) {
       </div>
     </div>
     ${isMine ? `
-      <button class="sc-btn danger" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;"
-        onclick="deleteSpot(${s.id}); closeDrawer();">🗑️ Spot löschen</button>
+      <button id="mdBtnDelete" class="sc-btn danger" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">🗑️ Spot löschen</button>
     ` : `
-      <div style="display:flex;gap:0.5rem;">
-        <button class="sc-btn navigate" style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;"
-          onclick="navigateToSpot(${s.lat},${s.lng}); closeDrawer();">🧭 Route</button>
-        <button class="sc-btn primary" style="flex:2;padding:0.8rem;font-size:0.85rem;border-radius:12px;"
-          onclick="closeDrawer(); setTimeout(()=>openSpotDetail(${s.id}),300);">📋 Details & Einladung</button>
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+        <button id="mdBtnRoute"   class="sc-btn navigate" style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">🧭 Route</button>
+        <button id="mdBtnProfile" class="sc-btn"          style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">👤 Profil</button>
       </div>
+      <button id="mdBtnDetail" class="sc-btn primary" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">📋 Details & Einladung</button>
     `}
   `;
+
+  // Event-Listener nach innerHTML — kein onclick-String-Problem
+  if (isMine) {
+    document.getElementById('mdBtnDelete')?.addEventListener('click', () => {
+      deleteSpot(s.id); closeDrawer();
+    });
+  } else {
+    document.getElementById('mdBtnRoute')?.addEventListener('click', () => {
+      navigateToSpot(s.lat, s.lng); closeDrawer();
+    });
+    document.getElementById('mdBtnProfile')?.addEventListener('click', () => {
+      closeDrawer();
+      setTimeout(() => showSpotOwnerProfile(s.code), 300);
+    });
+    document.getElementById('mdBtnDetail')?.addEventListener('click', () => {
+      closeDrawer();
+      setTimeout(() => openSpotDetail(s.id), 300);
+    });
+  }
 }
 
 // ─── PLACE MODE ──────────────────────────────────────────────────────────────
