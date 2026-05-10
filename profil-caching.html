@@ -219,7 +219,11 @@ textarea.finp-anzeige:focus { border-color:var(--acc); }
 
 <script>
 'use strict';
-
+  
+if (!localStorage.getItem('sm_code')) {
+  const newCode = Math.random().toString(36).substring(2, 8);
+  localStorage.setItem('sm_code', newCode);
+}
 const SPOT        = 'caching';
 const PROFILE_KEY = 'sm_profile_caching';
 const API_BASE    = 'https://spotme-chat-obom.onrender.com/api';
