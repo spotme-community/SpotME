@@ -954,6 +954,11 @@ function initMap() {
       openSpotForm();
       return;
     }
+    // ⚡ Karte schließt den Drawer NUR, wenn der Klick wirklich auf der Karte war
+    const target = e.originalEvent?.target;
+    if (target && (target.closest('#drawer') || target.closest('.modal-overlay') || target.closest('#topbar') || target.closest('#dock') || target.closest('.fab-wrap'))) {
+      return; // Klick im UI-Bereich → Drawer NICHT schließen
+    }
     if (currentDrawer) {
       closeDrawer();
     }
@@ -964,7 +969,9 @@ function initMap() {
   document.getElementById('drawerOverlay')?.addEventListener('touchstart', stopEvent, { passive: true });
   document.getElementById('drawerOverlay')?.addEventListener('click', stopEvent);
   document.getElementById('drawer')?.addEventListener('touchstart', stopEvent, { passive: true });
-  document.getElementById('drawer')?.addEventListener('click', stopEvent);
+  document.getElementById('drawer')?.addEventListener('click', e => {
+    e.stopPropagation(); // Klicks im Drawer bleiben im Drawer
+  });
   document.querySelectorAll('.modal-overlay').forEach(el => {
     el.addEventListener('touchstart', stopEvent, { passive: true });
     el.addEventListener('click', stopEvent);
@@ -974,7 +981,6 @@ function initMap() {
   startInvitePolling();
   if ('Notification' in window) Notification.requestPermission();
 }
-
 
 // ─── SPOTS ───────────────────────────────────────────────────────────────────
 async function loadAllSpots() {
