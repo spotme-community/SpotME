@@ -789,7 +789,7 @@
 </div>
 
 <!-- DRAWER OVERLAY -->
-<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer-overlay" id="drawerOverlay"></div>
 
 <!-- DRAWER -->
 <div class="drawer" id="drawer">
@@ -924,6 +924,7 @@ let knownInviteCount   = 0;
 let toastTimer, currentDrawer = null;
 
 // ─── MAP INIT ────────────────────────────────────────────────────────────────
+
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false, tap: false })
          .setView([39.47, -0.38], 14);
@@ -942,7 +943,7 @@ function initMap() {
     map.setView([userPos.lat, userPos.lng], 15);
   });
 
-  // Ein einziger Klick-Handler: Place-Mode ODER Drawer schließen
+  // Kartenklick: Place‑Mode ODER Drawer schließen (nur wenn nicht auf UI)
   map.on('click', e => {
     if (placeMode) {
       tempLatLng = e.latlng;
@@ -954,27 +955,35 @@ function initMap() {
       openSpotForm();
       return;
     }
-    // ⚡ Karte schließt den Drawer NUR, wenn der Klick wirklich auf der Karte war
-    const target = e.originalEvent?.target;
-    if (target && (target.closest('#drawer') || target.closest('.modal-overlay') || target.closest('#topbar') || target.closest('#dock') || target.closest('.fab-wrap'))) {
-      return; // Klick im UI-Bereich → Drawer NICHT schließen
+    // Klick stammt von einem UI‑Element → Drawer bleibt offen
+    const t = e.originalEvent?.target;
+    if (t && (t.closest('#drawer') || t.closest('.modal-overlay') || t.closest('#topbar') || t.closest('#dock') || t.closest('.fab-wrap'))) {
+      return;
     }
-    if (currentDrawer) {
-      closeDrawer();
-    }
+    if (currentDrawer) closeDrawer();
   });
 
-  // Overlay & Drawer: Touch-Events isolieren
-  const stopEvent = e => e.stopPropagation();
-  document.getElementById('drawerOverlay')?.addEventListener('touchstart', stopEvent, { passive: true });
-  document.getElementById('drawerOverlay')?.addEventListener('click', stopEvent);
-  document.getElementById('drawer')?.addEventListener('touchstart', stopEvent, { passive: true });
-  document.getElementById('drawer')?.addEventListener('click', e => {
-    e.stopPropagation(); // Klicks im Drawer bleiben im Drawer
-  });
+  // Overlay-Klick schließt den Drawer (nur wenn der Drawer selbst offen ist)
+  const overlay = document.getElementById('drawerOverlay');
+  if (overlay) {
+    overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (currentDrawer) closeDrawer();
+    });
+    overlay.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+
+  // Klicks innerhalb des Drawers verhindern, dass sie den Drawer schließen
+  const drawer = document.getElementById('drawer');
+  if (drawer) {
+    drawer.addEventListener('click', e => e.stopPropagation());
+    drawer.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  }
+
+  // Alle Modals isolieren
   document.querySelectorAll('.modal-overlay').forEach(el => {
-    el.addEventListener('touchstart', stopEvent, { passive: true });
-    el.addEventListener('click', stopEvent);
+    el.addEventListener('click', e => e.stopPropagation());
+    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
   });
 
   loadAllSpots();
