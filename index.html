@@ -622,20 +622,57 @@ async function sendInvite() {
 async function loadInvitesIntoDrawer(body) {
   body.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Lädt…</div>';
   let invites = [];
-  try { const r = await fetch(API+'/spotcache/invites/'+CODE); if (r.ok) invites = await r.json(); } catch {}
+  try {
+    const r = await fetch(API + '/spotcache/invites/' + CODE);
+    if (r.ok) invites = await r.json();
+  } catch {}
+
   knownInviteCount = invites.length;
   document.getElementById('statInvites').textContent = invites.length;
   document.getElementById('inviteHeaderBtn').classList.remove('alert-state');
-  if (!invites.length) { body.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Keine Einladungen</div>'; return; }
-  body.innerHTML = invites.map(inv => {
-    const isSender = inv.from === CODE;
-    return `<div class="spot-card"><div class="sc-icon">${isSender?'📤':'📨'}</div><div class="sc-info"><div class="sc-name">${esc(inv.spotName||'Spot')}</div><div class="sc-detail">${inv.status==='pending'?'⏳ Ausstehend':inv.status==='accepted'?'✅ Akzeptiert':'🎉 Getroffen'}</div></div>${!isSender&&inv.status==='pending'?`<div class="sc-actions" style="margin-top:0;"><button class="sc-btn primary" id="acc-${inv.id}">✅</button></div>`:''}</div>`;
-  }).join('');
-  invites.filter(i=>!i.from===CODE&&i.status==='pending').forEach(inv => {
-    setTimeout(() => document.getElementById(`acc-${inv.id}`)?.addEventListener('click', () => respondInvite(inv.id, 'accept')), 50);
-  });
-}
 
+  if (!invites.length) {
+    body.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted);">Keine Einladungen</div>';
+    return;
+  }
+
+  body.innerHTML = invites.map(inv => {
+    const isSender = inv.from === CODE;            // Ich bin der Sender
+    const isReceiver = inv.to === CODE;            // Ich bin der Empfänger
+
+    // Status-Anzeige
+    let statusText = '';
+    if (inv.status === 'pending')  statusText = '<span class="status-pill pending">⏳ Ausstehend</span>';
+    if (inv.status === 'accepted') {
+      const now = Date.now();
+      const active = inv.timeStart <= now && inv.timeEnd >= now;
+      statusText = active
+        ? '<span class="status-pill now">🟢 JETZT!</span>'
+        : '<span class="status-pill accepted">✅ Akzeptiert</span>';
+    }
+    if (inv.status === 'completed') statusText = '<span class="status-pill completed">🎉 Getroffen</span>';
+
+    // Akzeptieren-Button nur, wenn ich Empfänger bin und Status "pending"
+    const acceptButton = (isReceiver && inv.status === 'pending')
+      ? `<button class="sc-btn success" onclick="event.stopPropagation(); respondInvite(${inv.id},'accept')">✅</button>`
+      : '';
+
+    return `
+      <div class="spot-card">
+        <div class="sc-icon">${isSender ? '📤' : '📨'}</div>
+        <div class="sc-info">
+          <div class="sc-name">${esc(inv.spotName || 'Einladung')}</div>
+          <div class="sc-detail" style="margin-top:4px;">${statusText}</div>
+          <div class="sc-detail">${formatDateTime(inv.timeStart)} – ${formatDateTime(inv.timeEnd)}</div>
+        </div>
+        <div class="sc-actions" style="margin-top:0;">
+          ${acceptButton}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+  
 async function respondInvite(id, action) {
   try { await fetch(API+'/spotcache/invite/respond', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id,code:CODE,action}) }); } catch {}
   toast('✅ Antwort gespeichert');
