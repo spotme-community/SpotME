@@ -1,11 +1,6 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-
-    <!-- Eruda – Mobile Console (nur für Debugging) -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-  
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>SpotMe · Caching</title>
@@ -945,32 +940,31 @@ function initMap() {
   });
 
   map.on('click', e => {
-    if (placeMode) {
-      tempLatLng = e.latlng;
-      L.circleMarker([e.latlng.lat, e.latlng.lng], {
-        radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
-      }).addTo(map);
-      placeMode = false;
-      hidePlaceModeUI();
-      openSpotForm();
-    } else {
-      if (currentDrawer) closeDrawer();
-    }
+    if (!placeMode) return;
+    tempLatLng = e.latlng;
+    L.circleMarker([e.latlng.lat, e.latlng.lng], {
+      radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
+    }).addTo(map);
+    placeMode = false;
+    hidePlaceModeUI();
+    openSpotForm();
   });
 
-  // Drawer/Overlay absichern
+  // Karten-Klick schließt Drawer (nur wenn kein placeMode)
+  map.on('click', () => {
+    if (!placeMode && currentDrawer) closeDrawer();
+  });
+
+  // Drawer + Modals: Touches nicht zur Karte durchlassen
   ['drawer', 'drawerOverlay'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-      el.addEventListener('click',      e => e.stopPropagation());
-    }
+    if (!el) return;
+    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    el.addEventListener('click', e => e.stopPropagation());
   });
-
-  // Alle Modals absichern
-  document.querySelectorAll('.modal-overlay').forEach(modal => {
-    modal.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-    modal.addEventListener('click',      e => e.stopPropagation());
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    el.addEventListener('click', e => e.stopPropagation());
   });
 
   loadAllSpots();
@@ -1027,25 +1021,22 @@ async function renderMarkers() {
     }).addTo(map);
     m._spotMarker = true;
 
-    // Leaflet .on('click') statt bindPopup — öffnet nativen Drawer
+    // Kein bindPopup — direkt Drawer öffnen
     m.on('click', () => openMarkerDrawer(s, isMine, isOnline));
   });
 }
 
 function openMarkerDrawer(s, isMine, isOnline) {
-  const title = document.getElementById('drawerTitle');
-  const body  = document.getElementById('drawerBody');
   document.getElementById('drawerOverlay').classList.add('show');
   document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerTitle').textContent = isMine ? 'MEIN SPOT' : 'SPOT';
   currentDrawer = 'marker';
-
-  title.textContent = isMine ? 'MEIN SPOT' : 'SPOT';
 
   const onlineBadge = isOnline
     ? `<span style="font-size:0.72rem;color:var(--green);font-weight:600;font-family:'Space Mono',monospace;">● Online</span>`
     : `<span style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;">○ Offline</span>`;
 
-  body.innerHTML = `
+  document.getElementById('drawerBody').innerHTML = `
     <div class="spot-card" style="margin-bottom:1rem;">
       <div class="sc-icon">${isMine ? '🟠' : '📍'}</div>
       <div class="sc-info">
@@ -1057,31 +1048,30 @@ function openMarkerDrawer(s, isMine, isOnline) {
         </div>
       </div>
     </div>
-    ${isMine ? `
-      <button id="mdBtnDelete" class="sc-btn danger" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">🗑️ Spot löschen</button>
-    ` : `
-      <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
-        <button id="mdBtnRoute"   class="sc-btn navigate" style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">🧭 Route</button>
-        <button id="mdBtnProfile" class="sc-btn"          style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">👤 Profil</button>
-      </div>
-      <button id="mdBtnDetail" class="sc-btn primary" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">📋 Details & Einladung</button>
-    `}
+    ${isMine
+      ? `<button id="md-del" class="sc-btn danger" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">🗑️ Spot löschen</button>`
+      : `<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+           <button id="md-nav"  class="sc-btn navigate" style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">🧭 Route</button>
+           <button id="md-prof" class="sc-btn"          style="flex:1;padding:0.8rem;font-size:0.85rem;border-radius:12px;">👤 Profil</button>
+         </div>
+         <button id="md-det" class="sc-btn primary" style="width:100%;padding:0.8rem;font-size:0.9rem;border-radius:12px;">📋 Details & Einladung</button>`
+    }
   `;
 
-  // Event-Listener nach innerHTML — kein onclick-String-Problem
+  // Buttons per addEventListener — kein onclick-String
   if (isMine) {
-    document.getElementById('mdBtnDelete')?.addEventListener('click', () => {
+    document.getElementById('md-del').addEventListener('click', () => {
       deleteSpot(s.id); closeDrawer();
     });
   } else {
-    document.getElementById('mdBtnRoute')?.addEventListener('click', () => {
+    document.getElementById('md-nav').addEventListener('click', () => {
       navigateToSpot(s.lat, s.lng); closeDrawer();
     });
-    document.getElementById('mdBtnProfile')?.addEventListener('click', () => {
+    document.getElementById('md-prof').addEventListener('click', () => {
       closeDrawer();
       setTimeout(() => showSpotOwnerProfile(s.code), 300);
     });
-    document.getElementById('mdBtnDetail')?.addEventListener('click', () => {
+    document.getElementById('md-det').addEventListener('click', () => {
       closeDrawer();
       setTimeout(() => openSpotDetail(s.id), 300);
     });
