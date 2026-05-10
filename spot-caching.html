@@ -51,7 +51,15 @@
     }
 
     .leaflet-control-attribution { display: none !important; }
-    .leaflet-popup { display: none !important; }
+    .leaflet-popup-content-wrapper {
+      background: var(--glass2) !important;
+      backdrop-filter: blur(20px) !important;
+      border: 1px solid var(--bord2) !important;
+      border-radius: 14px !important;
+      color: var(--text) !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    }
+    .leaflet-popup-tip { background: var(--card2) !important; }
 
     /* ═══ TOP BAR ═══ */
     .topbar {
@@ -989,7 +997,7 @@ async function renderMarkers() {
   }));
 
   allSpots.forEach(s => {
-    const isMine   = s.code === CODE;
+    const isMine  = s.code === CODE;
     const isOnline = !isMine && onlineSet.has(s.code);
     const markerClass = isMine
       ? 'my-spot-marker'
@@ -997,65 +1005,32 @@ async function renderMarkers() {
 
     const m = L.marker([s.lat, s.lng], {
       icon: L.divIcon({
-        html: `<div class="${markerClass}" style="cursor:pointer;"></div>`,
+        html: `<div class="${markerClass}"></div>`,
         iconSize: isMine ? [20,20] : [16,16],
         className: ''
       })
     }).addTo(map);
     m._spotMarker = true;
 
-    // Direkt Drawer öffnen — kein Leaflet Popup
-    m.on('click', () => openMarkerDrawer(s, isMine, isOnline));
+    const onlineBadge = isOnline
+      ? `<span style="font-size:0.68rem;color:var(--green);font-weight:600;">● Online</span>`
+      : `<span style="font-size:0.68rem;color:var(--muted);">○ Offline</span>`;
+
+    let popup = `
+      <div style="font-family:'Outfit',sans-serif;min-width:140px;">
+        <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">${esc(s.name)}</div>
+        <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">💭 ${s.wishTag}</div>
+        <div style="margin-bottom:4px;">${onlineBadge}</div>
+        <div style="margin-bottom:8px;">${spotAgeHtml(s.createdAt || s.created_at)}</div>`;
+    if (!isMine) {
+      popup += `<button class="pop-btn inv" onclick="openSpotDetail(${s.id})">📋 Details & Einladung</button>
+                <button class="pop-btn nav" onclick="navigateToSpot(${s.lat},${s.lng})">🧭 Route</button>`;
+    } else {
+      popup += `<button class="pop-btn del" onclick="deleteSpot(${s.id})">🗑️ Löschen</button>`;
+    }
+    popup += `</div>`;
+    m.bindPopup(popup, { maxWidth: 200 });
   });
-}
-
-// ─── MARKER DRAWER ────────────────────────────────────────────────────────────
-function openMarkerDrawer(s, isMine, isOnline) {
-  const drawer  = document.getElementById('drawer');
-  const overlay = document.getElementById('drawerOverlay');
-  const title   = document.getElementById('drawerTitle');
-  const body    = document.getElementById('drawerBody');
-
-  overlay.classList.add('show');
-  drawer.classList.add('open');
-  currentDrawer = 'marker';
-
-  title.textContent = isMine ? 'MEIN SPOT' : 'SPOT';
-
-  const onlineBadge = isOnline
-    ? `<span style="font-size:0.72rem;color:var(--green);font-weight:600;font-family:'Space Mono',monospace;">● Online</span>`
-    : `<span style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;">○ Offline</span>`;
-
-  body.innerHTML = `
-    <div class="spot-card" style="margin-bottom:1rem;">
-      <div class="sc-icon">${isMine ? '🟠' : '📍'}</div>
-      <div class="sc-info">
-        <div class="sc-name">${esc(s.name)}</div>
-        <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-          <span class="sc-tag">${s.wishTag}</span>
-          ${onlineBadge}
-          ${spotAgeHtml(s.createdAt || s.created_at)}
-        </div>
-      </div>
-    </div>
-    ${isMine ? `
-      <button class="sc-btn danger" style="width:100%;padding:0.75rem;font-size:0.9rem;border-radius:12px;"
-        onclick="deleteSpot(${s.id}); closeDrawer();">
-        🗑️ Spot löschen
-      </button>
-    ` : `
-      <div style="display:flex;gap:0.5rem;">
-        <button class="sc-btn navigate" style="flex:1;padding:0.75rem;font-size:0.85rem;border-radius:12px;"
-          onclick="navigateToSpot(${s.lat},${s.lng}); closeDrawer();">
-          🧭 Route
-        </button>
-        <button class="sc-btn primary" style="flex:2;padding:0.75rem;font-size:0.85rem;border-radius:12px;"
-          onclick="openSpotDetail(${s.id}); closeDrawer();">
-          📋 Details & Einladung
-        </button>
-      </div>
-    `}
-  `;
 }
 
 // ─── PLACE MODE ──────────────────────────────────────────────────────────────
@@ -1787,20 +1762,25 @@ function spotAgeHtml(ts) {
   return `<span style="font-size:0.65rem;color:${a.color};font-family:'Space Mono',monospace;">${a.fresh ? '● ' : '○ '}${a.label}</span>`;
 }
 
-// Touch-Events der UI-Elemente stoppen – CSS-Isolation + JS-Blocker
-// Alle UI-Layer über der Karte bekommen touch-action: auto und stoppen Bubbling
-document.addEventListener('touchstart', e => {
-  const map = document.getElementById('map');
-  // Wenn Touch NICHT auf der Karte selbst — Drawer schließen verhindern
-  if (!map.contains(e.target)) {
-    e.stopImmediatePropagation();
-  }
-}, { passive: true, capture: true });
-
-// Nur echte Karten-Touches schließen den Drawer
-document.getElementById('map').addEventListener('touchstart', () => {
+// Drawer schließen nur bei direktem Klick auf die Karte
+map.on('click', () => {
   if (currentDrawer) closeDrawer();
-}, { passive: true });
+});
+
+// Drawer/Overlay: Touches nicht zur Karte durchsickern lassen
+['drawer', 'drawerOverlay'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+    el.addEventListener('click',      e => e.stopPropagation());
+  }
+});
+
+// Alle Modals ebenfalls absichern
+document.querySelectorAll('.modal-overlay').forEach(modal => {
+  modal.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  modal.addEventListener('click',      e => e.stopPropagation());
+});
 
 window.addEventListener('load', initMap);
 </script>
