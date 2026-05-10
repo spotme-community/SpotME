@@ -940,42 +940,41 @@ function initMap() {
       icon: L.divIcon({ html:'<div class="user-marker"></div>', iconSize:[14,14], className:'' })
     }).addTo(map).bindPopup('<b style="color:#22d3ee;">📍 Du</b>');
     map.setView([userPos.lat, userPos.lng], 15);
-    // Standort wird NICHT an Server gesendet (Datenschutz)
-    // Nur Heartbeat für Online-Status
   });
 
+  // Ein einziger Klick-Handler: Place-Mode ODER Drawer schließen
   map.on('click', e => {
-    if (!placeMode) return;
-    tempLatLng = e.latlng;
-    L.circleMarker([e.latlng.lat, e.latlng.lng], {
-      radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
-    }).addTo(map);
-    placeMode = false;
-    hidePlaceModeUI();
-    openSpotForm();
+    if (placeMode) {
+      tempLatLng = e.latlng;
+      L.circleMarker([e.latlng.lat, e.latlng.lng], {
+        radius:8, color:'#f59e0b', fillColor:'#f59e0b', fillOpacity:0.4, weight:2
+      }).addTo(map);
+      placeMode = false;
+      hidePlaceModeUI();
+      openSpotForm();
+      return;
+    }
+    if (currentDrawer) {
+      closeDrawer();
+    }
   });
 
-  // Karten-Klick schließt Drawer (nur wenn kein placeMode)
-  map.on('click', () => {
-    if (!placeMode && currentDrawer) closeDrawer();
-  });
-
-  // Drawer + Modals: Touches nicht zur Karte durchlassen
-  ['drawer', 'drawerOverlay'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-    el.addEventListener('click', e => e.stopPropagation());
-  });
+  // Overlay & Drawer: Touch-Events isolieren
+  const stopEvent = e => e.stopPropagation();
+  document.getElementById('drawerOverlay')?.addEventListener('touchstart', stopEvent, { passive: true });
+  document.getElementById('drawerOverlay')?.addEventListener('click', stopEvent);
+  document.getElementById('drawer')?.addEventListener('touchstart', stopEvent, { passive: true });
+  document.getElementById('drawer')?.addEventListener('click', stopEvent);
   document.querySelectorAll('.modal-overlay').forEach(el => {
-    el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-    el.addEventListener('click', e => e.stopPropagation());
+    el.addEventListener('touchstart', stopEvent, { passive: true });
+    el.addEventListener('click', stopEvent);
   });
 
   loadAllSpots();
   startInvitePolling();
   if ('Notification' in window) Notification.requestPermission();
 }
+
 
 // ─── SPOTS ───────────────────────────────────────────────────────────────────
 async function loadAllSpots() {
