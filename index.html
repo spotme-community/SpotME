@@ -377,21 +377,27 @@ function renderMarkers() {
   }
   window._spotMarkers = [];
 
-  // Nur rendern, wenn überhaupt Spots vorhanden sind
   if (!allSpots.length) return;
 
   allSpots.forEach(s => {
     const isMine = s.code === CODE;
-    const color  = isMine ? '#f59e0b' : '#94a3b8';
+    const starColor = isMine ? '#f59e0b' : '#66ccff';   // Orange für eigene, Hellblau für fremde
 
     const el = document.createElement('div');
-    el.style.cssText = `width:16px;height:16px;background:${color};border:2.5px solid ${isMine ? 'white' : 'rgba(255,255,255,0.5)'};border-radius:50%;box-shadow:0 0 8px ${isMine ? 'rgba(245,158,11,0.7)' : 'transparent'};cursor:pointer;`;
+    el.style.cssText = `
+      font-size: 32px;
+      color: ${starColor};
+      line-height: 1;
+      text-shadow: 0 0 6px rgba(0,0,0,0.5);
+      cursor: pointer;
+      user-select: none;
+    `;
+    el.textContent = '✴️';
 
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat([s.lng, s.lat])
       .addTo(map);
 
-    // Klick auf Marker → Drawer öffnen
     el.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -401,7 +407,6 @@ function renderMarkers() {
     window._spotMarkers.push(marker);
   });
 }
-
 // ═══════════════════════════════════════════════════════════════════════════
 // MARKER DRAWER (Buttons setzen _userRequestedNavigation)
 // ═══════════════════════════════════════════════════════════════════════════
