@@ -738,16 +738,34 @@ function openRadiusSearch() { document.getElementById('radiusModal').classList.a
 function selectRadius(km) {
   if (!userPos) { toast('❌ Standort unbekannt'); return; }
   if (radiusCircle) radiusCircle.remove();
+
   const center = [userPos.lng, userPos.lat];
   radiusCircle = new maplibregl.Marker({ color: '#f59e0b' }).setLngLat(center).addTo(map);
+
   const circleGeoJSON = createCircleGeoJSON(center, km);
+
+  // Alte Layer sauber entfernen
   if (map.getLayer('radius-layer')) map.removeLayer('radius-layer');
   if (map.getSource('radius-source')) map.removeSource('radius-source');
-  map.addSource('radius-source', { type:'geojson', data:circleGeoJSON });
-  map.addLayer({ id:'radius-layer', type:'fill', source:'radius-source', paint:{'fill-color':'#f59e0b','fill-opacity':0.08} });
-  map.fitBounds(maplibregl.LngLatBounds.fromCircle(center, km*1000), { padding:20 });
-  const nearby = allSpots.filter(s => s.code!==CODE && haversineKm(userPos.lat, userPos.lng, s.lat, s.lng) <= km);
-  document.getElementById('radiusResult').textContent = `${nearby.length} Spot${nearby.length!==1?'s':''} innerhalb ${km} km`;
+
+  map.addSource('radius-source', { type: 'geojson', data: circleGeoJSON });
+  map.addLayer({
+    id: 'radius-layer',
+    type: 'fill',
+    source: 'radius-source',
+    paint: { 'fill-color': '#f59e0b', 'fill-opacity': 0.08 }
+  });
+
+  // Bounds manuell berechnen (statt fromCircle)
+  const bounds = new maplibregl.LngLatBounds();
+  // umschließende Box über alle Polygonpunkte
+  circleGeoJSON.coordinates[0].forEach(c => {
+    bounds.extend(c);
+  });
+  map.fitBounds(bounds, { padding: 40, maxZoom: 16 });
+
+  const nearby = allSpots.filter(s => s.code !== CODE && haversineKm(userPos.lat, userPos.lng, s.lat, s.lng) <= km);
+  document.getElementById('radiusResult').textContent = `${nearby.length} Spot${nearby.length !== 1 ? 's' : ''} innerhalb ${km} km`;
   closeModals();
 }
 function clearRadius() {
