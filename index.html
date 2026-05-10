@@ -247,6 +247,11 @@
 'use strict';
 
 const API  = 'https://spotme-chat-obom.onrender.com/api';
+// Wenn noch kein Code existiert → einen neuen generieren
+if (!localStorage.getItem('sm_code')) {
+  const newCode = Math.random().toString(36).substring(2, 8);
+  localStorage.setItem('sm_code', newCode);
+}
 const CODE = localStorage.getItem('sm_code') || '000000';
 
 let map, userPos, placeMode = false, tempLatLng = null;
