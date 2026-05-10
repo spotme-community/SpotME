@@ -468,20 +468,21 @@ async function deleteSpot(id) {
 // NAVIGATION (nur bei explizitem Button-Klick)
 // ═══════════════════════════════════════════════════════════════════════════
 function navigateToSpot(lat, lng) {
-  if (!window._userRequestedNavigation) return;   // schützt vor ungewollten Aufrufen
+  if (!window._userRequestedNavigation) return;
   window._userRequestedNavigation = false;
 
   map.flyTo({ center: [lng, lat], zoom: 17 });
+
   if (userPos) {
-    const dist = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng)*1000);
-    const url = `https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
-    toast(`🧭 ~${dist<1000?dist+'m':(dist/1000).toFixed(1)+'km'} – OSM wird geöffnet`);
-    setTimeout(() => window.open(url, '_blank'), 800);
+    const dist = Math.round(haversineKm(userPos.lat, userPos.lng, lat, lng) * 1000);
+    const angle = Math.atan2(lng - userPos.lng, lat - userPos.lat) * 180 / Math.PI;
+    const dirs  = ['↑ N', '↗ NO', '→ O', '↘ SO', '↓ S', '↙ SW', '← W', '↖ NW'];
+    const dir   = dirs[((Math.round(angle / 45) % 8) + 8) % 8];
+    toast(`🧭 ${dir} · ${dist < 1000 ? dist + 'm' : (dist / 1000).toFixed(1) + 'km'}`);
   } else {
     toast('📍 Spot anvisiert');
   }
 }
-
 // ═══════════════════════════════════════════════════════════════════════════
 // DRAWER (Listen)
 // ═══════════════════════════════════════════════════════════════════════════
