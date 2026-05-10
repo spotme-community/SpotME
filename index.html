@@ -342,41 +342,53 @@ function hidePlaceModeUI() {
 // ═══════════════════════════════════════════════════════════════════════════
 async function loadAllSpots() {
   try {
-    const r = await fetch(API+'/userspots/all');
-    if (r.ok) allSpots = await r.json();
-    if (!allSpots || allSpots.length === 0) throw new Error('leer');
-  } catch {
-    allSpots = [
-      { id:101, code:'111111', lat:39.473, lng:-0.377, name:'Geheimer Garten', wishTag:'Park' },
-      { id:102, code:'222222', lat:39.469, lng:-0.381, name:'Sonnenplatz',      wishTag:'Kaffee' },
-      { id:103, code:'333333', lat:39.471, lng:-0.374, name:'Aussichtspunkt',   wishTag:'Spaziergang' }
-    ];
+    const r = await fetch(API + '/userspots/all');
+    if (!r.ok) throw new Error('Server-Fehler');
+    allSpots = await r.json();
+    if (!Array.isArray(allSpots)) allSpots = [];
+  } catch (e) {
+    // Kein Fallback – einfach leer anzeigen
+    allSpots = [];
+    toast('⚠️ Keine Spots gefunden – Server nicht erreichbar?');
   }
+
+  // Eigene Spots herausfiltern und Zähler aktualisieren
   mySpots = allSpots.filter(s => s.code === CODE);
   document.getElementById('statSpots').textContent = mySpots.length;
   renderMarkers();
 }
 
 function renderMarkers() {
-  if (window._spotMarkers) { window._spotMarkers.forEach(m => m.remove()); }
+  // Alte Marker entfernen
+  if (window._spotMarkers) {
+    window._spotMarkers.forEach(m => m.remove());
+  }
   window._spotMarkers = [];
+
+  // Nur rendern, wenn überhaupt Spots vorhanden sind
+  if (!allSpots.length) return;
 
   allSpots.forEach(s => {
     const isMine = s.code === CODE;
     const color  = isMine ? '#f59e0b' : '#94a3b8';
-    const el = document.createElement('div');
-    el.style.cssText = `width:16px;height:16px;background:${color};border:2.5px solid ${isMine?'white':'rgba(255,255,255,0.5)'};border-radius:50%;box-shadow:0 0 8px ${isMine?'rgba(245,158,11,0.7)':'transparent'};cursor:pointer;`;
 
-    const marker = new maplibregl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map);
+    const el = document.createElement('div');
+    el.style.cssText = `width:16px;height:16px;background:${color};border:2.5px solid ${isMine ? 'white' : 'rgba(255,255,255,0.5)'};border-radius:50%;box-shadow:0 0 8px ${isMine ? 'rgba(245,158,11,0.7)' : 'transparent'};cursor:pointer;`;
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([s.lng, s.lat])
+      .addTo(map);
+
+    // Klick auf Marker → Drawer öffnen
     el.addEventListener('click', e => {
       e.preventDefault();
       e.stopPropagation();
       openMarkerDrawer(s, isMine);
     });
+
     window._spotMarkers.push(marker);
   });
-}
-
+  }
 // ═══════════════════════════════════════════════════════════════════════════
 // MARKER DRAWER (Buttons setzen _userRequestedNavigation)
 // ═══════════════════════════════════════════════════════════════════════════
