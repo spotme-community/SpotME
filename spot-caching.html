@@ -51,15 +51,8 @@
     }
 
     .leaflet-control-attribution { display: none !important; }
-    .leaflet-popup-content-wrapper {
-      background: var(--glass2) !important;
-      backdrop-filter: blur(20px) !important;
-      border: 1px solid var(--bord2) !important;
-      border-radius: 14px !important;
-      color: var(--text) !important;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
-    }
-    .leaflet-popup-tip { background: var(--card2) !important; }
+    /* Leaflet Popups deaktiviert – wir nutzen eigene Modals */
+    .leaflet-popup { display: none !important; }
 
     /* ═══ TOP BAR ═══ */
     .topbar {
@@ -293,17 +286,8 @@
       transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
       display: flex;
       flex-direction: column;
-      touch-action: pan-y;
-      isolation: isolate;
     }
     .drawer.open { transform: translateY(0); }
-
-    /* Alle UI-Layer über der Karte isolieren */
-    .topbar, .dock, .fab-wrap, .stats-strip,
-    .modal-overlay, .drawer-overlay {
-      touch-action: auto;
-      isolation: isolate;
-    }
 
     .drawer-handle {
       width: 36px; height: 4px;
@@ -848,6 +832,18 @@
   </div>
 </div>
 
+<!-- MEIN SPOT SHEET -->
+<div class="modal-overlay" id="mySpotSheet" style="z-index:650;">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div id="mySpotSheetContent"></div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+      <button class="btn-ghost" style="flex:1;" onclick="closeModals()">Schließen</button>
+      <button class="btn-primary" style="flex:1;background:var(--red);border-color:var(--red);" id="mySpotDeleteBtn">🗑️ Löschen</button>
+    </div>
+  </div>
+</div>
+
 <!-- SPOT DETAIL MODAL -->
 <div class="modal-overlay" id="spotDetailModal" style="z-index:650;">
   <div class="modal" style="max-height:88vh;overflow-y:auto;padding-bottom:max(1.5rem,env(safe-area-inset-bottom));">
@@ -1021,24 +1017,14 @@ async function renderMarkers() {
     }).addTo(map);
     m._spotMarker = true;
 
-    const onlineBadge = isOnline
-      ? `<span style="font-size:0.68rem;color:var(--green);font-weight:600;">● Online</span>`
-      : `<span style="font-size:0.68rem;color:var(--muted);">○ Offline</span>`;
-
-    let popup = `
-      <div style="font-family:'Outfit',sans-serif;min-width:140px;">
-        <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">${esc(s.name)}</div>
-        <div style="font-size:0.72rem;color:#94a3b8;margin-bottom:4px;">💭 ${s.wishTag}</div>
-        <div style="margin-bottom:4px;">${onlineBadge}</div>
-        <div style="margin-bottom:8px;">${spotAgeHtml(s.createdAt || s.created_at)}</div>`;
-    if (!isMine) {
-      popup += `<button class="pop-btn inv" onclick="openSpotDetail(${s.id})">📋 Details & Einladung</button>
-                <button class="pop-btn nav" onclick="navigateToSpot(${s.lat},${s.lng})">🧭 Route</button>`;
-    } else {
-      popup += `<button class="pop-btn del" onclick="deleteSpot(${s.id})">🗑️ Löschen</button>`;
-    }
-    popup += `</div>`;
-    m.bindPopup(popup, { maxWidth: 200 });
+    // Kein Leaflet Popup — direkt eigenes Modal öffnen
+    m.on('click', () => {
+      if (isMine) {
+        showMySpotSheet(s);
+      } else {
+        openSpotDetail(s.id);
+      }
+    });
   });
 }
 
@@ -1263,6 +1249,27 @@ function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('show');
   currentDrawer = null;
+}
+
+// ─── MEIN SPOT SHEET ─────────────────────────────────────────────────────────
+function showMySpotSheet(s) {
+  const isOnline = onlineSet.has(s.code);
+  document.getElementById('mySpotSheetContent').innerHTML = `
+    <div style="font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--acc);letter-spacing:.08em;margin-bottom:0.75rem;">MEIN SPOT</div>
+    <div style="font-weight:700;font-size:1.05rem;margin-bottom:0.4rem;">${esc(s.name)}</div>
+    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;">
+      <span class="sc-tag">${s.wishTag}</span>
+      ${spotAgeHtml(s.createdAt || s.created_at)}
+    </div>
+    <div style="font-size:0.78rem;color:var(--muted2);">
+      📍 ${s.lat?.toFixed(5)}, ${s.lng?.toFixed(5)}
+    </div>
+  `;
+  document.getElementById('mySpotDeleteBtn').onclick = () => {
+    deleteSpot(s.id);
+    closeModals();
+  };
+  document.getElementById('mySpotSheet').classList.add('show');
 }
 
 // ─── SPOT DETAIL (vor Einladung) ─────────────────────────────────────────────
@@ -1773,8 +1780,18 @@ function spotAgeHtml(ts) {
 
 // Touch-Events der UI-Elemente stoppen – CSS-Isolation + JS-Blocker
 // Alle UI-Layer über der Karte bekommen touch-action: auto und stoppen Bubbling
-// Drawer schließt nur über drawerOverlay (onclick) und ✕ Button
-// KEIN touchstart auf #map — das war der Bug
+document.addEventListener('touchstart', e => {
+  const map = document.getElementById('map');
+  // Wenn Touch NICHT auf der Karte selbst — Drawer schließen verhindern
+  if (!map.contains(e.target)) {
+    e.stopImmediatePropagation();
+  }
+}, { passive: true, capture: true });
+
+// Nur echte Karten-Touches schließen den Drawer
+document.getElementById('map').addEventListener('touchstart', () => {
+  if (currentDrawer) closeDrawer();
+}, { passive: true });
 
 window.addEventListener('load', initMap);
 </script>
