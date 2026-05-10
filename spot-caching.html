@@ -293,8 +293,17 @@
       transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
       display: flex;
       flex-direction: column;
+      touch-action: pan-y;
+      isolation: isolate;
     }
     .drawer.open { transform: translateY(0); }
+
+    /* Alle UI-Layer über der Karte isolieren */
+    .topbar, .dock, .fab-wrap, .stats-strip,
+    .modal-overlay, .drawer-overlay {
+      touch-action: auto;
+      isolation: isolate;
+    }
 
     .drawer-handle {
       width: 36px; height: 4px;
@@ -1764,18 +1773,8 @@ function spotAgeHtml(ts) {
 
 // Touch-Events der UI-Elemente stoppen – CSS-Isolation + JS-Blocker
 // Alle UI-Layer über der Karte bekommen touch-action: auto und stoppen Bubbling
-document.addEventListener('touchstart', e => {
-  const map = document.getElementById('map');
-  // Wenn Touch NICHT auf der Karte selbst — Drawer schließen verhindern
-  if (!map.contains(e.target)) {
-    e.stopImmediatePropagation();
-  }
-}, { passive: true, capture: true });
-
-// Nur echte Karten-Touches schließen den Drawer
-document.getElementById('map').addEventListener('touchstart', () => {
-  if (currentDrawer) closeDrawer();
-}, { passive: true });
+// Drawer schließt nur über drawerOverlay (onclick) und ✕ Button
+// KEIN touchstart auf #map — das war der Bug
 
 window.addEventListener('load', initMap);
 </script>
