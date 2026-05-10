@@ -51,7 +51,6 @@
     }
 
     .leaflet-control-attribution { display: none !important; }
-    /* Leaflet Popups deaktiviert – wir nutzen eigene Modals */
     .leaflet-popup { display: none !important; }
 
     /* ═══ TOP BAR ═══ */
@@ -832,18 +831,6 @@
   </div>
 </div>
 
-<!-- MEIN SPOT SHEET -->
-<div class="modal-overlay" id="mySpotSheet" style="z-index:650;">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div id="mySpotSheetContent"></div>
-    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-      <button class="btn-ghost" style="flex:1;" onclick="closeModals()">Schließen</button>
-      <button class="btn-primary" style="flex:1;background:var(--red);border-color:var(--red);" id="mySpotDeleteBtn">🗑️ Löschen</button>
-    </div>
-  </div>
-</div>
-
 <!-- SPOT DETAIL MODAL -->
 <div class="modal-overlay" id="spotDetailModal" style="z-index:650;">
   <div class="modal" style="max-height:88vh;overflow-y:auto;padding-bottom:max(1.5rem,env(safe-area-inset-bottom));">
@@ -1002,7 +989,7 @@ async function renderMarkers() {
   }));
 
   allSpots.forEach(s => {
-    const isMine  = s.code === CODE;
+    const isMine   = s.code === CODE;
     const isOnline = !isMine && onlineSet.has(s.code);
     const markerClass = isMine
       ? 'my-spot-marker'
@@ -1010,22 +997,65 @@ async function renderMarkers() {
 
     const m = L.marker([s.lat, s.lng], {
       icon: L.divIcon({
-        html: `<div class="${markerClass}"></div>`,
+        html: `<div class="${markerClass}" style="cursor:pointer;"></div>`,
         iconSize: isMine ? [20,20] : [16,16],
         className: ''
       })
     }).addTo(map);
     m._spotMarker = true;
 
-    // Kein Leaflet Popup — direkt eigenes Modal öffnen
-    m.on('click', () => {
-      if (isMine) {
-        showMySpotSheet(s);
-      } else {
-        openSpotDetail(s.id);
-      }
-    });
+    // Direkt Drawer öffnen — kein Leaflet Popup
+    m.on('click', () => openMarkerDrawer(s, isMine, isOnline));
   });
+}
+
+// ─── MARKER DRAWER ────────────────────────────────────────────────────────────
+function openMarkerDrawer(s, isMine, isOnline) {
+  const drawer  = document.getElementById('drawer');
+  const overlay = document.getElementById('drawerOverlay');
+  const title   = document.getElementById('drawerTitle');
+  const body    = document.getElementById('drawerBody');
+
+  overlay.classList.add('show');
+  drawer.classList.add('open');
+  currentDrawer = 'marker';
+
+  title.textContent = isMine ? 'MEIN SPOT' : 'SPOT';
+
+  const onlineBadge = isOnline
+    ? `<span style="font-size:0.72rem;color:var(--green);font-weight:600;font-family:'Space Mono',monospace;">● Online</span>`
+    : `<span style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;">○ Offline</span>`;
+
+  body.innerHTML = `
+    <div class="spot-card" style="margin-bottom:1rem;">
+      <div class="sc-icon">${isMine ? '🟠' : '📍'}</div>
+      <div class="sc-info">
+        <div class="sc-name">${esc(s.name)}</div>
+        <div class="sc-detail" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+          <span class="sc-tag">${s.wishTag}</span>
+          ${onlineBadge}
+          ${spotAgeHtml(s.createdAt || s.created_at)}
+        </div>
+      </div>
+    </div>
+    ${isMine ? `
+      <button class="sc-btn danger" style="width:100%;padding:0.75rem;font-size:0.9rem;border-radius:12px;"
+        onclick="deleteSpot(${s.id}); closeDrawer();">
+        🗑️ Spot löschen
+      </button>
+    ` : `
+      <div style="display:flex;gap:0.5rem;">
+        <button class="sc-btn navigate" style="flex:1;padding:0.75rem;font-size:0.85rem;border-radius:12px;"
+          onclick="navigateToSpot(${s.lat},${s.lng}); closeDrawer();">
+          🧭 Route
+        </button>
+        <button class="sc-btn primary" style="flex:2;padding:0.75rem;font-size:0.85rem;border-radius:12px;"
+          onclick="openSpotDetail(${s.id}); closeDrawer();">
+          📋 Details & Einladung
+        </button>
+      </div>
+    `}
+  `;
 }
 
 // ─── PLACE MODE ──────────────────────────────────────────────────────────────
@@ -1249,27 +1279,6 @@ function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('show');
   currentDrawer = null;
-}
-
-// ─── MEIN SPOT SHEET ─────────────────────────────────────────────────────────
-function showMySpotSheet(s) {
-  const isOnline = onlineSet.has(s.code);
-  document.getElementById('mySpotSheetContent').innerHTML = `
-    <div style="font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--acc);letter-spacing:.08em;margin-bottom:0.75rem;">MEIN SPOT</div>
-    <div style="font-weight:700;font-size:1.05rem;margin-bottom:0.4rem;">${esc(s.name)}</div>
-    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;">
-      <span class="sc-tag">${s.wishTag}</span>
-      ${spotAgeHtml(s.createdAt || s.created_at)}
-    </div>
-    <div style="font-size:0.78rem;color:var(--muted2);">
-      📍 ${s.lat?.toFixed(5)}, ${s.lng?.toFixed(5)}
-    </div>
-  `;
-  document.getElementById('mySpotDeleteBtn').onclick = () => {
-    deleteSpot(s.id);
-    closeModals();
-  };
-  document.getElementById('mySpotSheet').classList.add('show');
 }
 
 // ─── SPOT DETAIL (vor Einladung) ─────────────────────────────────────────────
