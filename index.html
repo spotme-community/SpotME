@@ -241,6 +241,14 @@
   </div>
 </div>
 
+<!-- OSM Navigation Overlay -->
+<div class="modal-overlay" id="osmNavModal" style="z-index:750;">
+  <div class="modal" style="max-width:95%; height:90%; max-height:90vh; padding:0; overflow:hidden; position:relative;">
+    <button class="drawer-close" style="position:absolute; top:12px; right:16px; z-index:10;" onclick="closeOSMNav()">✕</button>
+    <iframe id="osmFrame" style="width:100%; height:100%; border:none;" allow="geolocation" src=""></iframe>
+  </div>
+</div>
+  
 <div class="toast" id="toast"></div>
 
 <script>
@@ -498,17 +506,26 @@ function navigateToSpot(lat, lng) {
 }
 
 function openOsmNavigation(lat, lng) {
+  const frame = document.getElementById('osmFrame');
+  if (!frame) return;
+
+  let url;
   if (userPos) {
-    const url = `https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
-    window.open(url, '_blank');
-    toast('🗺️ OSM-Navigation wird geöffnet');
+    url = `https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
   } else {
-    const url = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
-    window.open(url, '_blank');
-    toast('🗺️ OSM-Karte wird geöffnet (kein Standort)');
+    url = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`;
   }
+
+  frame.src = url;
+  document.getElementById('osmNavModal').classList.add('show');
 }
 
+function closeOSMNav() {
+  document.getElementById('osmNavModal').classList.remove('show');
+  // iframe leeren, damit die Karte nicht im Hintergrund weiterläuft
+  document.getElementById('osmFrame').src = '';
+}
+  
 // ═══════════════════════════════════════════════════════════════════════════
 // DRAWER (Listen)
 // ═══════════════════════════════════════════════════════════════════════════
