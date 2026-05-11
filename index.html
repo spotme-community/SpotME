@@ -308,25 +308,6 @@ let activeRadius = null, detailSpot = null, detailMiniMap = null;
 const styleKey = 'spotme_mapstyle';
 const currentStyle = localStorage.getItem(styleKey) || 'dark'; // Standard: Dark
 
-// Tag und Nachtstyle der Karten
-function applyStyle(styleId) {
-    const url = styleId === 'dark' 
-        ? 'https://tiles.openfreemap.org/styles/dark'
-        : 'https://tiles.openfreemap.org/styles/liberty';
-    
-    map.setStyle(url); // Sanfter Übergang durch MapLibre
-    localStorage.setItem(styleKey, styleId);
-    
-    // Button-Icon aktualisieren
-    const btn = document.getElementById('styleToggle');
-    btn.textContent = styleId === 'dark' ? '🌙' : '☀️';
-}
-
-// Beim Klick umschalten
-document.getElementById('styleToggle').addEventListener('click', () => {
-    const next = (map.getStyle().name === 'dark') ? 'liberty' : 'dark';
-    applyStyle(next);
-});
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function esc(s) { const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
@@ -852,6 +833,26 @@ function openDrawerFiltered(spots,km) {
   body.querySelectorAll('[data-lat]').forEach(b=>b.addEventListener('click',()=>navigateToSpot(+b.dataset.lat,+b.dataset.lng)));
   body.querySelectorAll('[data-det]').forEach(b=>b.addEventListener('click',()=>{const s=allSpots.find(x=>x.id==b.dataset.det);if(s){closeDrawer();setTimeout(()=>openSpotDetail(s.id),300);}}));
 }
+
+// Tag und Nachtstyle der Karten
+function applyStyle(styleId) {
+    const url = styleId === 'dark' 
+        ? 'https://tiles.openfreemap.org/styles/dark'
+        : 'https://tiles.openfreemap.org/styles/liberty';
+    
+    map.setStyle(url); // Sanfter Übergang durch MapLibre
+    localStorage.setItem(styleKey, styleId);
+    
+    // Button-Icon aktualisieren
+    const btn = document.getElementById('styleToggle');
+    btn.textContent = styleId === 'dark' ? '🌙' : '☀️';
+}
+
+// Beim Klick umschalten
+document.getElementById('styleToggle').addEventListener('click', () => {
+    const next = (map.getStyle().name === 'dark') ? 'liberty' : 'dark';
+    applyStyle(next);
+});
 
 // ── MATCH ────────────────────────────────────────────────────────────────────
 function showMatch(name,spot) {
