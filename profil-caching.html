@@ -352,32 +352,77 @@ function handleAvatar(input) {
   reader.readAsDataURL(file);
 }
 
+function saveProfile() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name)   { toast('⚠️ Anzeigename ist Pflicht'); return; }
+  const wishes = document.getElementById('f-wishes').value.trim();
+  if (!wishes) { toast('⚠️ Mindestens ein Wunsch erforderlich'); return; }
+  const offers = document.getElementById('f-offers').value.trim();
+  if (!offers) { toast('⚠️ Gib an, was du bieten kannst'); return; }
+  const region = document.getElementById('f-region').value;
+  if (!region) { toast('⚠️ Region wählen'); return; }
 
-// profil-caching (2).html
-async function saveProfile() {
-  // ... Validierung wie gehabt ...
+  const yearVal = document.getElementById('f-year').value;
+  const year    = parseInt(yearVal);
+  if (yearVal && (year < 1940 || year > 2007)) { toast('⚠️ Gültiges Geburtsjahr eingeben'); return; }
 
-  const profile = {
-    code:  CODE,
-    spot:  SPOT,
-    token: localStorage.getItem('sm_token'),
-    name, region, province, city, bio,
-    wishTags: wishArray,
-    offerTags: offerArray,
-    avatar: avatarData || null,   // <-- Avatar mitschicken
+  const existing = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+  const wishArray = wishes.split(',').map(s => s.trim()).filter(Boolean);
+  const offerArray = offers.split(',').map(s => s.trim()).filter(Boolean);
+
+  const province = document.getElementById('f-province').value || null;
+  const city     = document.getElementById('f-city').value || null;
+  const bio      = document.getElementById('f-bio').value.trim() || '';
+
+  // Profil-Objekt für localStorage
+  const profileLocal = {
+    name,
+    year:         year || existing.year || null,
+    region,
+    province,
+    city,
+    bio,
+    wishes:       wishArray,
+    offers:       offerArray,
+    avatar:       avatarData || null,
+    updated:      Date.now()
   };
 
-  await fetch(`${API_BASE}/profile`, {
+  if (profileLocal.year) {
+    document.getElementById('f-year').readOnly = true;
+    document.getElementById('year-hint').style.display = 'block';
+  }
+
+  // Lokal speichern
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profileLocal));
+  localStorage.setItem('sm_name', name);
+
+  // Token sicherstellen und an Server senden
+  ensureToken();
+  const token = localStorage.getItem('sm_token');
+
+  fetch(`${API_BASE}/profile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(profile)
-  });
+    body: JSON.stringify({
+      code:       localStorage.getItem('sm_code'),
+      name,
+      spot:       SPOT,
+      region,
+      province,
+      city,
+      bio,
+      wishTags:   wishArray,
+      offerTags:  offerArray,
+      avatar:     avatarData || null,   // <-- Avatar zusammen mit Profil senden
+      token
+    })
+  }).catch(() => {});
 
-  // lokale Speicherung ebenfalls up-to-date halten
-  localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...profile, updated: Date.now() }));
   showSavedBadge();
   toast('✅ Cache-Profil gespeichert');
 }
+
   
 async function loadAvatarFromServer() {
   const code = localStorage.getItem('sm_code');
@@ -465,81 +510,6 @@ function ensureToken() {
     localStorage.setItem('sm_token', arr.join(''));
   }
   
-}
-
-function saveProfile() {
-  const name = document.getElementById('f-name').value.trim();
-  if (!name)   { toast('⚠️ Anzeigename ist Pflicht'); return; }
-  const wishes = document.getElementById('f-wishes').value.trim();
-  if (!wishes) { toast('⚠️ Mindestens ein Wunsch erforderlich'); return; }
-  const offers = document.getElementById('f-offers').value.trim();
-  if (!offers) { toast('⚠️ Gib an, was du bieten kannst'); return; }
-  const region = document.getElementById('f-region').value;
-  if (!region) { toast('⚠️ Region wählen'); return; }
-
-  const yearVal = document.getElementById('f-year').value;
-  const year    = parseInt(yearVal);
-  if (yearVal && (year < 1940 || year > 2007)) { toast('⚠️ Gültiges Geburtsjahr eingeben'); return; }
-
-  const existing = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
-  const wishArray = wishes.split(',').map(s => s.trim()).filter(Boolean);
-  const offerArray = offers.split(',').map(s => s.trim()).filter(Boolean);
-
-  const profile = {
-    name,
-    year:         year || existing.year || null,
-    region,
-    province:     document.getElementById('f-province').value || null,
-    city:         document.getElementById('f-city').value || null,
-    bio:          document.getElementById('f-bio').value.trim() || '',
-    wishes:       wishArray,
-    offers:       offerArray,
-    avatar:       avatarData || null,
-    updated:      Date.now()
-  };
-
-  if (profile.year) {
-    document.getElementById('f-year').readOnly = true;
-    document.getElementById('year-hint').style.display = 'block';
-  }
-
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-  localStorage.setItem('sm_name', name);
-
-  // Token sicherstellen und Profil IMMER an Server senden
-  ensureToken();
-  const token = localStorage.getItem('sm_token');
-
-  fetch(`${API_BASE}/profile`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      code: localStorage.getItem('sm_code'),
-      name,
-      spot: SPOT,
-      region: profile.region,
-      province: profile.province,
-      city: profile.city,
-      bio: profile.bio,
-      wishTags: wishArray,
-      offerTags: offerArray,
-      token
-    })
-  }).catch(() => {});
-
-  showSavedBadge();
-  toast('✅ Cache-Profil gespeichert');
-}
-  
-function autoSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (!document.getElementById('f-name').value.trim()) return;
-    if (!document.getElementById('f-wishes').value.trim()) return;
-    if (!document.getElementById('f-offers').value.trim()) return;
-    if (!document.getElementById('f-region').value) return;
-    saveProfile();
-  }, 1500);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
