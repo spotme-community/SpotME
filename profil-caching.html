@@ -464,6 +464,17 @@ async function clearAvatar() {
   setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
 }
 
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (!document.getElementById('f-name').value.trim()) return;
+    if (!document.getElementById('f-wishes').value.trim()) return;
+    if (!document.getElementById('f-offers').value.trim()) return;
+    if (!document.getElementById('f-region').value) return;
+    saveProfile();
+  }, 1500);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // PROFIL LADEN & SPEICHERN
 // ══════════════════════════════════════════════════════════════════════════
