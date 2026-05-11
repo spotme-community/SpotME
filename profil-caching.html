@@ -344,14 +344,13 @@ function handleAvatar(input) {
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       avatarData = canvas.toDataURL('image/jpeg', 0.55);
       renderAvatar();
-      if (statusEl) statusEl.textContent = '⏳ Speichere auf Server…';
-      uploadAvatarToServer();
+      if (statusEl) statusEl.textContent = '✅ Avatar gewählt – beim Speichern hochgeladen';
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
-}
-
+        }
+  
 function saveProfile() {
   const name = document.getElementById('f-name').value.trim();
   if (!name)   { toast('⚠️ Anzeigename ist Pflicht'); return; }
