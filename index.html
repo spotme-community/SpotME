@@ -175,6 +175,8 @@
   <button class="icon-btn" onclick="location.href='index.html'">‹</button>
   <button class="icon-btn" onclick="location.href='profil-caching.html'">👤</button>
   <button class="icon-btn" id="inviteHeaderBtn" onclick="openDrawer('invites')">📨<span class="badge" id="inviteBadge" style="display:none">0</span></button>
+  <!-- In der Topbar, neben den anderen Buttons -->
+  <button class="icon-btn" id="styleToggle" title="Kartenstil">🌙</button>
   <button class="icon-btn" onclick="location.reload()">↺</button>
 </div>
 
@@ -302,6 +304,29 @@ let selectedInviteSpot = null;
 let invitePollInterval = null, knownInviteCount = 0;
 let toastTimer, currentDrawer = null;
 let activeRadius = null, detailSpot = null, detailMiniMap = null;
+
+const styleKey = 'spotme_mapstyle';
+const currentStyle = localStorage.getItem(styleKey) || 'dark'; // Standard: Dark
+
+// Tag und Nachtstyle der Karten
+function applyStyle(styleId) {
+    const url = styleId === 'dark' 
+        ? 'https://tiles.openfreemap.org/styles/dark'
+        : 'https://tiles.openfreemap.org/styles/liberty';
+    
+    map.setStyle(url); // Sanfter Übergang durch MapLibre
+    localStorage.setItem(styleKey, styleId);
+    
+    // Button-Icon aktualisieren
+    const btn = document.getElementById('styleToggle');
+    btn.textContent = styleId === 'dark' ? '🌙' : '☀️';
+}
+
+// Beim Klick umschalten
+document.getElementById('styleToggle').addEventListener('click', () => {
+    const next = (map.getStyle().name === 'dark') ? 'liberty' : 'dark';
+    applyStyle(next);
+});
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function esc(s) { const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
