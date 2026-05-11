@@ -147,9 +147,32 @@
     .toast { position:absolute; bottom:90px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--glass2); backdrop-filter:blur(20px); border:1px solid var(--bord2); border-radius:100px; padding:0.5rem 1.2rem; font-size:0.82rem; font-weight:500; z-index:900; opacity:0; pointer-events:none; transition:all 0.3s; white-space:nowrap; }
     .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
-    .my-spot-marker { width:20px; height:20px; background:var(--acc); border-radius:50%; border:2.5px solid rgba(255,255,255,0.9); box-shadow:0 0 12px rgba(245,158,11,0.6); cursor:pointer; }
-    .other-spot-marker { width:16px; height:16px; background:var(--muted); border-radius:50%; border:2px solid rgba(255,255,255,0.5); cursor:pointer; position:relative; }
-    .other-spot-marker.is-online::after { content:''; position:absolute; top:-3px; right:-3px; width:8px; height:8px; border-radius:50%; background:var(--green); border:1.5px solid var(--bg); box-shadow:0 0 6px rgba(16,185,129,0.8); animation:online-pulse 2s ease infinite; }
+    .my-spot-marker {
+  width: 24px; height: 24px;
+  background: radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b);
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  box-shadow: 0 0 16px rgba(245,158,11,0.8), 0 0 32px rgba(245,158,11,0.4);
+  border: none;
+}
+.other-spot-marker {
+  width: 20px; height: 20px;
+  background: radial-gradient(circle at 30% 30%, #cbd5e1, #64748b);
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  box-shadow: 0 0 12px rgba(148,163,184,0.6);
+  border: none;
+  position: relative;
+}
+.other-spot-marker.is-online::after {
+  content: '';
+  position: absolute;
+  top: -4px; right: -4px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 1.5px solid var(--bg);
+  box-shadow: 0 0 8px rgba(16,185,129,0.8);
+}
+    
     @keyframes online-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
     .user-marker { width:14px; height:14px; background:var(--cyan); border-radius:50%; border:2.5px solid #fff; box-shadow:0 0 10px rgba(34,211,238,0.6); }
 
