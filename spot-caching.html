@@ -505,25 +505,64 @@ function openSpotForm() {
 // ── NAVIGATION ───────────────────────────────────────────────────────────────
 function navigateToSpot(lat, lng) {
   const old=document.getElementById('navToast'); if(old) old.remove();
-  map.flyTo({center:[lng,lat],zoom:17});
+
+  // Alten Route-Layer entfernen
+  if (map.getLayer('route-line')) map.removeLayer('route-line');
+  if (map.getLayer('route-line-casing')) map.removeLayer('route-line-casing');
+  if (map.getSource('route')) map.removeSource('route');
+
+  map.flyTo({center:[lng,lat],zoom:15});
+
   if (!userPos) { toast('📍 Spot auf Karte'); return; }
-  const dist=Math.round(haversineKm(userPos.lat,userPos.lng,lat,lng)*1000);
-  const angle=Math.atan2(lng-userPos.lng,lat-userPos.lat)*180/Math.PI;
-  const dirs=['↑ N','↗ NO','→ O','↘ SO','↓ S','↙ SW','← W','↖ NW'];
-  const dir=dirs[((Math.round(angle/45)%8)+8)%8];
-  const dl=dist<1000?`${dist}m`:`${(dist/1000).toFixed(1)}km`;
-  const osmUrl=`https://www.openstreetmap.org/directions?engine=graphhopper_foot&route=${userPos.lat},${userPos.lng};${lat},${lng}`;
+
+  // OSRM Route laden
+  const osrmUrl=`https://router.project-osrm.org/route/v1/foot/${userPos.lng},${userPos.lat};${lng},${lat}?overview=full&geometries=geojson`;
+
+  toast('🧭 Route wird berechnet…');
+
+  fetch(osrmUrl)
+    .then(r=>r.json())
+    .then(data=>{
+      if (!data.routes?.length) { toast('❌ Keine Route gefunden'); return; }
+      const route=data.routes[0];
+      const dist=route.distance, dur=Math.round(route.duration/60);
+      const dl=dist<1000?`${Math.round(dist)}m`:`${(dist/1000).toFixed(1)}km`;
+
+      // Route auf Karte zeichnen
+      map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:route.geometry}});
+      map.addLayer({id:'route-line-casing',type:'line',source:'route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#0a0d12','line-width':7,'line-opacity':0.8}});
+      map.addLayer({id:'route-line',type:'line',source:'route',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#22d3ee','line-width':4,'line-opacity':0.95}});
+
+      // Bounds auf Route setzen
+      const coords=route.geometry.coordinates;
+      const bounds=coords.reduce((b,c)=>b.extend(c), new maplibregl.LngLatBounds(coords[0],coords[0]));
+      map.fitBounds(bounds,{padding:60});
+
+      // Toast mit Info
+      showNavToast(dl, dur);
+    })
+    .catch(()=>{ toast('❌ Routing fehlgeschlagen'); });
+}
+
+function showNavToast(dist, minutes) {
+  const old=document.getElementById('navToast'); if(old) old.remove();
   const el=document.createElement('div');
   el.id='navToast';
   el.style.cssText='position:absolute;bottom:90px;left:1rem;right:1rem;z-index:900;background:var(--glass2);backdrop-filter:blur(20px);border:1px solid var(--bord2);border-radius:14px;padding:0.75rem 1rem;';
   el.innerHTML=`<div style="display:flex;align-items:center;gap:0.75rem;">
-    <div><div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--acc);">🧭 ${dir} · ${dl}</div>
-    <div style="font-size:0.68rem;color:var(--muted2);margin-top:2px;">Spot auf Karte</div></div>
-    <a href="${osmUrl}" target="_blank" rel="noopener" style="padding:6px 12px;border-radius:8px;background:var(--acc);color:#0a0d12;font-weight:700;font-size:0.75rem;text-decoration:none;white-space:nowrap;flex-shrink:0;">🗺️ OSM</a>
-    <button id="navClose" style="background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:0;">✕</button>
+    <div style="flex:1;">
+      <div style="font-family:'Space Mono',monospace;font-size:0.8rem;color:var(--cyan);">🚶 ${dist} · ~${minutes} Min</div>
+      <div style="font-size:0.68rem;color:var(--muted2);margin-top:2px;">Route auf Karte angezeigt</div>
+    </div>
+    <button id="navClearBtn" style="padding:6px 12px;border-radius:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:var(--red);font-size:0.75rem;font-weight:600;cursor:pointer;white-space:nowrap;">✕ Route löschen</button>
   </div>`;
   document.body.appendChild(el);
-  document.getElementById('navClose').addEventListener('click', ()=>el.remove());
+  document.getElementById('navClearBtn').addEventListener('click', ()=>{
+    if (map.getLayer('route-line')) map.removeLayer('route-line');
+    if (map.getLayer('route-line-casing')) map.removeLayer('route-line-casing');
+    if (map.getSource('route')) map.removeSource('route');
+    el.remove();
+  });
 }
 
 // ── DRAWER ───────────────────────────────────────────────────────────────────
