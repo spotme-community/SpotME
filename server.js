@@ -226,15 +226,16 @@ await pool.query(`
 // SpotCache v2 – User-eigene Geocaching-Spots
 await pool.query(`
   CREATE TABLE IF NOT EXISTS user_spots (
-    id          SERIAL PRIMARY KEY,
-    code        TEXT NOT NULL,
-    lat         DOUBLE PRECISION NOT NULL,
-    lng         DOUBLE PRECISION NOT NULL,
-    name        TEXT NOT NULL,
-    description TEXT,
-    wish_tag    TEXT NOT NULL,
-    image       TEXT,
-    created_at  BIGINT NOT NULL
+    id           SERIAL PRIMARY KEY,
+    code         TEXT NOT NULL,
+    lat          DOUBLE PRECISION NOT NULL,
+    lng          DOUBLE PRECISION NOT NULL,
+    name         TEXT NOT NULL,
+    description  TEXT,
+    wish_tag     TEXT NOT NULL,
+    image        TEXT,
+    image_status TEXT DEFAULT 'pending',
+    created_at   BIGINT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_user_spots_code ON user_spots(code);
   CREATE INDEX IF NOT EXISTS idx_user_spots_wish ON user_spots(wish_tag);
@@ -273,6 +274,7 @@ await pool.query(`
     await pool.query(`ALTER TABLE profiles ADD COLUMN IF NOT EXISTS offer_tags TEXT`);
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image_status TEXT DEFAULT 'pending'`).catch(() => {});
     console.log('✅ v4.2 – Alle Spalten bereit (inkl. SpotCache)');
   } catch (e) {
     console.log('ℹ️ Spalten existieren bereits oder konnten nicht angelegt werden');
@@ -1313,7 +1315,8 @@ app.get('/api/userspots/all', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, code, lat, lng, name, description, wish_tag AS "wishTag",
-              ${noImage ? 'NULL AS image' : 'image'}, created_at
+              ${noImage ? 'NULL AS image' : 'CASE WHEN image_status = \'approved\' THEN image ELSE NULL END AS image'},
+              created_at
        FROM user_spots
        ORDER BY created_at DESC`
     );
@@ -1329,7 +1332,9 @@ app.get('/api/userspots/:code', async (req, res) => {
   const { code } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT id, lat, lng, name, description, wish_tag AS "wishTag", image, created_at
+      `SELECT id, lat, lng, name, description, wish_tag AS "wishTag",
+              CASE WHEN image_status = 'approved' THEN image ELSE NULL END AS image,
+              created_at
        FROM user_spots WHERE code = $1 ORDER BY created_at DESC`,
       [code]
     );
@@ -1494,6 +1499,43 @@ app.post('/api/spotcache/checkin', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Fehler beim Einchecken' });
+  }
+});
+
+app.get('/api/admin/pending-spot-images', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, code, name, description, wish_tag, image, image_status, created_at
+       FROM user_spots
+       WHERE image IS NOT NULL AND (image_status = 'pending' OR image_status IS NULL)
+       ORDER BY created_at ASC`
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+app.post('/api/admin/spot-image-action', requireAdmin, async (req, res) => {
+  const { id, action } = req.body;
+  if (!id || !['approve','reject'].includes(action)) {
+    return res.status(400).json({ error: 'id und action (approve/reject) erforderlich' });
+  }
+  try {
+    if (action === 'approve') {
+      await pool.query(
+        `UPDATE user_spots SET image_status = 'approved' WHERE id = $1`, [id]
+      );
+      console.log(`✅ Spot-Bild freigegeben: ID ${id}`);
+    } else {
+      await pool.query(
+        `UPDATE user_spots SET image = NULL, image_status = NULL WHERE id = $1`, [id]
+      );
+      console.log(`❌ Spot-Bild abgelehnt & gelöscht: ID ${id}`);
+    }
+    res.json({ success: true, action, id });
+  } catch (e) {
+    res.status(500).json({ error: 'Datenbankfehler' });
   }
 });
 

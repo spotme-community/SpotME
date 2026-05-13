@@ -90,7 +90,11 @@ body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,
   <div class="stats">
     <div class="stat">
       <div class="stat-num" id="stat-pending">—</div>
-      <div class="stat-label">Warten auf Freigabe</div>
+      <div class="stat-label">Avatare ausstehend</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="stat-spots-pending">—</div>
+      <div class="stat-label">Spot-Bilder ausstehend</div>
     </div>
     <div class="stat">
       <div class="stat-num" id="stat-done">—</div>
@@ -98,9 +102,24 @@ body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,
     </div>
   </div>
 
-  <div class="section-title">Avatare zur Freigabe</div>
-  <div class="grid" id="pending-grid">
-    <div class="empty">Lade...</div>
+  <!-- Tabs -->
+  <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+    <button id="tab-btn-avatars" onclick="switchTab('avatars')" style="flex:1;padding:.55rem;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#000;font-weight:700;font-size:.85rem;cursor:pointer;">👤 Avatare</button>
+    <button id="tab-btn-spots"   onclick="switchTab('spots')"   style="flex:1;padding:.55rem;border-radius:10px;border:1px solid var(--bord);background:transparent;color:var(--muted);font-weight:700;font-size:.85rem;cursor:pointer;">📍 Spot-Bilder</button>
+  </div>
+
+  <div id="tab-avatars">
+    <div class="section-title">Avatare zur Freigabe</div>
+    <div class="grid" id="pending-grid">
+      <div class="empty">Lade...</div>
+    </div>
+  </div>
+
+  <div id="tab-spots" style="display:none;">
+    <div class="section-title">Spot-Bilder zur Freigabe</div>
+    <div class="grid" id="pending-spots-grid">
+      <div class="empty">Lade...</div>
+    </div>
   </div>
 </div>
 
@@ -154,33 +173,68 @@ async function loadData() {
     const grid = document.getElementById('pending-grid');
     if (!items.length) {
       grid.innerHTML = '<div class="empty">✅ Keine Avatare zur Freigabe</div>';
-      return;
-    }
-
-    grid.innerHTML = items.map(item => {
-      const d = new Date(Number(item.updated_at));
-      const time = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
-      const spotLabel = { gay:'🏳️‍🌈 Gay', dates:'💕 Dates', general:'🌍 General' }[item.spot] || item.spot;
-      return `<div class="av-card" id="card-${item.code}-${item.spot}">
-        <div class="av-img-wrap">
-          ${item.avatar
-            ? `<img src="${item.avatar}" alt="Avatar">`
-            : `<div class="no-img">🧑</div>`}
-          <div class="av-spot-badge">${spotLabel}</div>
-        </div>
-        <div class="av-info">
-          <div class="av-code">${item.code}</div>
-          <div class="av-time">📅 ${time}</div>
-          <div class="av-btns">
-            <button class="btn-approve" id="btn-a-${item.code}-${item.spot}" onclick="action('${item.code}','${item.spot}','approve')">✅ Freigeben</button>
-            <button class="btn-reject"  id="btn-r-${item.code}-${item.spot}" onclick="action('${item.code}','${item.spot}','reject')">❌ Ablehnen</button>
+    } else {
+      grid.innerHTML = items.map(item => {
+        const d = new Date(Number(item.updated_at));
+        const time = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+        const spotLabel = { gay:'🏳️‍🌈 Gay', dates:'💕 Dates', caching:'🗺️ Caching', general:'🌍 General' }[item.spot] || item.spot;
+        return `<div class="av-card" id="card-${item.code}-${item.spot}">
+          <div class="av-img-wrap">
+            ${item.avatar
+              ? `<img src="${item.avatar}" alt="Avatar">`
+              : `<div class="no-img">🧑</div>`}
+            <div class="av-spot-badge">${spotLabel}</div>
           </div>
-        </div>
-      </div>`;
-    }).join('');
+          <div class="av-info">
+            <div class="av-code">${item.code}</div>
+            <div class="av-time">📅 ${time}</div>
+            <div class="av-btns">
+              <button class="btn-approve" id="btn-a-${item.code}-${item.spot}" onclick="action('${item.code}','${item.spot}','approve')">✅ Freigeben</button>
+              <button class="btn-reject"  id="btn-r-${item.code}-${item.spot}" onclick="action('${item.code}','${item.spot}','reject')">❌ Ablehnen</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
   } catch (e) {
     document.getElementById('pending-grid').innerHTML = '<div class="empty">⚠️ Fehler beim Laden</div>';
   }
+
+  // Spot-Bilder
+  try {
+    const res2 = await fetch(`${API}/admin/pending-spot-images`, {
+      headers: { 'x-admin-key': adminKey }
+    });
+    if (res2.ok) {
+      const spots = await res2.json();
+      document.getElementById('stat-spots-pending').textContent = spots.length;
+      const grid2 = document.getElementById('pending-spots-grid');
+      if (!spots.length) {
+        grid2.innerHTML = '<div class="empty">✅ Keine Spot-Bilder zur Freigabe</div>';
+      } else {
+        grid2.innerHTML = spots.map(s => {
+          const d = new Date(Number(s.created_at));
+          const time = d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+          return `<div class="av-card" id="spot-card-${s.id}">
+            <div class="av-img-wrap">
+              ${s.image ? `<img src="${s.image}" alt="Spot">` : `<div class="no-img">📍</div>`}
+              <div class="av-spot-badge">🗺️ Caching</div>
+            </div>
+            <div class="av-info">
+              <div class="av-code">${escHtml(s.name)}</div>
+              <div class="av-time">👤 ${s.code} · ${escHtml(s.wish_tag||'')}</div>
+              ${s.description ? `<div class="av-time">💬 ${escHtml(s.description)}</div>` : ''}
+              <div class="av-time">📅 ${time}</div>
+              <div class="av-btns">
+                <button class="btn-approve" id="spot-btn-a-${s.id}" onclick="spotAction(${s.id},'approve')">✅ Freigeben</button>
+                <button class="btn-reject"  id="spot-btn-r-${s.id}" onclick="spotAction(${s.id},'reject')">❌ Ablehnen</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch {}
 }
 
 async function action(code, spot, act) {
@@ -213,6 +267,55 @@ async function action(code, spot, act) {
       if (br) { br.classList.remove('btn-disabled'); br.disabled = false; }
     }
   } catch (e) {
+    showToast('⚠️ Keine Verbindung');
+  }
+}
+
+function switchTab(tab) {
+  document.getElementById('tab-avatars').style.display = tab === 'avatars' ? 'block' : 'none';
+  document.getElementById('tab-spots').style.display   = tab === 'spots'   ? 'block' : 'none';
+  const on  = 'flex:1;padding:.55rem;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#000;font-weight:700;font-size:.85rem;cursor:pointer;';
+  const off = 'flex:1;padding:.55rem;border-radius:10px;border:1px solid var(--bord);background:transparent;color:var(--muted);font-weight:700;font-size:.85rem;cursor:pointer;';
+  document.getElementById('tab-btn-avatars').style.cssText = tab === 'avatars' ? on : off;
+  document.getElementById('tab-btn-spots').style.cssText   = tab === 'spots'   ? on : off;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s||'');
+  return d.innerHTML;
+}
+
+async function spotAction(id, act) {
+  const ba = document.getElementById(`spot-btn-a-${id}`);
+  const br = document.getElementById(`spot-btn-r-${id}`);
+  if (ba) { ba.disabled = true; ba.style.opacity = '0.5'; }
+  if (br) { br.disabled = true; br.style.opacity = '0.5'; }
+
+  try {
+    const res = await fetch(`${API}/admin/spot-image-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+      body: JSON.stringify({ id, action: act })
+    });
+    if (res.ok) {
+      const card = document.getElementById(`spot-card-${id}`);
+      if (card) {
+        card.style.transition = 'opacity .3s';
+        card.style.opacity = '0';
+        setTimeout(() => card.remove(), 300);
+      }
+      doneToday++;
+      document.getElementById('stat-done').textContent = doneToday;
+      const cur = parseInt(document.getElementById('stat-spots-pending').textContent) || 0;
+      document.getElementById('stat-spots-pending').textContent = Math.max(0, cur - 1);
+      showToast(act === 'approve' ? '✅ Spot-Bild freigegeben' : '❌ Spot-Bild abgelehnt & gelöscht');
+    } else {
+      showToast('⚠️ Fehler');
+      if (ba) { ba.disabled = false; ba.style.opacity = '1'; }
+      if (br) { br.disabled = false; br.style.opacity = '1'; }
+    }
+  } catch {
     showToast('⚠️ Keine Verbindung');
   }
 }

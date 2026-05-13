@@ -170,6 +170,20 @@
     .empty-state { text-align:center; padding:2.5rem 1rem; color:var(--muted); font-size:0.85rem; }
     .empty-state .es-icon { font-size:2.5rem; margin-bottom:0.6rem; opacity:0.5; }
 
+    /* Fullscreen Bild */
+    .img-fullscreen {
+      position:absolute; inset:0; z-index:950;
+      background:rgba(0,0,0,0.95);
+      display:none; align-items:center; justify-content:center;
+      cursor:zoom-out;
+    }
+    .img-fullscreen.show { display:flex; }
+    .img-fullscreen img {
+      max-width:100%; max-height:100%;
+      object-fit:contain;
+      border-radius:4px;
+    }
+
     ::-webkit-scrollbar { width:4px; }
     ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
   </style>
@@ -309,6 +323,10 @@
   <button class="match-btn" id="matchCloseBtn">✨ Weiter</button>
 </div>
 
+<div class="img-fullscreen" id="imgFullscreen" onclick="this.classList.remove('show')">
+  <img id="imgFullscreenSrc" src="" alt="">
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
@@ -365,6 +383,11 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),3000);
 }
 function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('show')); }
+
+function openImg(src) {
+  document.getElementById('imgFullscreenSrc').src = src;
+  document.getElementById('imgFullscreen').classList.add('show');
+}
 
 // ── MAP ──────────────────────────────────────────────────────────────────────
 function initMap() {
@@ -460,7 +483,7 @@ function openMarkerDrawer(s, isMine, isOnline) {
           ${spotAgeHtml(s.createdAt||s.created_at)}
         </div>
         ${s.description ? `<div style="font-size:0.78rem;color:var(--muted2);margin-top:5px;line-height:1.45;">${esc(s.description)}</div>` : ''}
-        ${s.image ? `<img src="${s.image}" alt="" style="width:100%;max-height:120px;object-fit:cover;border-radius:9px;margin-top:8px;border:1px solid var(--bord);">` : ''}
+        ${s.image ? `<img src="${s.image}" alt="" onclick="openImg('${s.image}')" style="width:100%;max-height:120px;object-fit:cover;border-radius:9px;margin-top:8px;border:1px solid var(--bord);cursor:zoom-in;">` : ''}
       </div>
     </div>
     ${isMine
@@ -836,7 +859,7 @@ async function openSpotDetail(spotId) {
   const offers=(profile?.offerTags||profile?.offers||[]).filter(Boolean);
 
   document.getElementById('spotDetailContent').innerHTML=`
-    ${spotImage ? `<img src="${spotImage}" alt="" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:0.75rem;border:1px solid var(--bord2);">` : ''}
+    ${spotImage ? `<img src="${spotImage}" alt="" onclick="openImg('${spotImage}')" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:0.75rem;border:1px solid var(--bord2);cursor:zoom-in;">` : ''}
     <div style="display:flex;gap:0.75rem;align-items:flex-start;margin-bottom:0.75rem;">
       <div class="spot-detail-avatar">${avHtml}</div>
       <div style="flex:1;min-width:0;">
