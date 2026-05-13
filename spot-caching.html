@@ -408,7 +408,8 @@ function initMap() {
 // ── SPOTS ────────────────────────────────────────────────────────────────────
 async function loadAllSpots() {
   try {
-    const r = await fetch(`${API}/userspots/all`);
+    // Spots ohne Bilder laden (schnell für Karte)
+    const r = await fetch(`${API}/userspots/all?noimage=1`);
     if (r.ok) allSpots = await r.json();
   } catch { allSpots=[]; }
   mySpots = allSpots.filter(s => s.code === CODE);
@@ -807,10 +808,26 @@ async function openSpotDetail(spotId) {
   },100);
 
   const isOnline=onlineSet.has(spot.code);
-  let profile=null, avatarData=null;
+  let profile=null, avatarData=null, spotImage=spot.image||null;
+
+  // Alles parallel laden — Profil, Avatar, und Bild falls nicht bereits geladen
+  const fetches = [
+    fetch(`${API}/profile/${spot.code}?spot=caching`),
+    fetch(`${API}/avatar/${spot.code}?spot=caching`)
+  ];
+  // Bild lazy nachladen wenn noch nicht im allSpots Objekt
+  if (!spotImage) {
+    fetches.push(fetch(`${API}/userspots/${spot.code}`).then(r=>r.ok?r.json():null));
+  }
   try {
-    const [pRes,aRes]=await Promise.all([fetch(`${API}/profile/${spot.code}?spot=caching`),fetch(`${API}/avatar/${spot.code}?spot=caching`)]);
-    if(pRes.ok) profile=await pRes.json(); if(aRes.ok) avatarData=await aRes.json();
+    const results = await Promise.all(fetches);
+    if(results[0]?.ok) profile = await results[0].json();
+    if(results[1]?.ok) avatarData = await results[1].json();
+    if (fetches.length === 3 && results[2]) {
+      const spotData = await results[2];
+      const match = Array.isArray(spotData) ? spotData.find(s=>s.id===spotId) : null;
+      if (match?.image) spotImage = match.image;
+    }
   } catch {}
 
   const dist=userPos?(()=>{const d=Math.round(haversineKm(userPos.lat,userPos.lng,spot.lat,spot.lng)*1000);return d<1000?`${d}m`:`${(d/1000).toFixed(1)}km`;})():null;
@@ -819,7 +836,7 @@ async function openSpotDetail(spotId) {
   const offers=(profile?.offerTags||profile?.offers||[]).filter(Boolean);
 
   document.getElementById('spotDetailContent').innerHTML=`
-    ${spot.image ? `<img src="${spot.image}" alt="" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:0.75rem;border:1px solid var(--bord2);">` : ''}
+    ${spotImage ? `<img src="${spotImage}" alt="" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:0.75rem;border:1px solid var(--bord2);">` : ''}
     <div style="display:flex;gap:0.75rem;align-items:flex-start;margin-bottom:0.75rem;">
       <div class="spot-detail-avatar">${avHtml}</div>
       <div style="flex:1;min-width:0;">
