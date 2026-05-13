@@ -1346,6 +1346,37 @@ app.get('/api/userspots/:code', async (req, res) => {
 });
 
 // 🟠 Spot löschen
+app.put('/api/userspots/:id', async (req, res) => {
+  const { id } = req.params;
+  const { code, name, description, wishTag, image } = req.body;
+  if (!code || !name || !wishTag) {
+    return res.status(400).json({ error: 'code, name, wishTag erforderlich' });
+  }
+  try {
+    // Eigentümer prüfen
+    const check = await pool.query('SELECT code FROM user_spots WHERE id = $1', [id]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
+    if (check.rows[0].code !== code) return res.status(403).json({ error: 'Keine Berechtigung' });
+
+    // Neues Bild → pending, kein neues Bild → Status beibehalten
+    if (image) {
+      await pool.query(
+        `UPDATE user_spots SET name=$1, description=$2, wish_tag=$3, image=$4, image_status='pending' WHERE id=$5`,
+        [name, description||null, wishTag, image, id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE user_spots SET name=$1, description=$2, wish_tag=$3 WHERE id=$4`,
+        [name, description||null, wishTag, id]
+      );
+    }
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren' });
+  }
+});
+
 app.delete('/api/userspots/:id', async (req, res) => {
   const { id } = req.params;
   const { code } = req.body;
