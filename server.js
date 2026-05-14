@@ -1125,19 +1125,13 @@ app.patch('/api/spotcache/invite/:id', async (req, res) => {
       return res.status(403).json({ error: 'Nicht berechtigt' });
     }
 
-    // Wenn angenommen: auch den RAM-Kanal aktivieren
-    // damit der Messenger sofort reagieren kann
-    if (status === 'accepted') {
-      const invite = result.rows[0];
-      const room = [invite.from_code, invite.to_code].sort().join('-');
-      if (!invites[invite.from_code]) invites[invite.from_code] = [];
-      invites[invite.from_code].push({
-        from: invite.to_code,
-        to: invite.from_code,
-        ts: Date.now(),
-        room
-      });
-    }
+   
+if (status === 'accepted') {
+  const invite = result.rows[0];
+  const room = [invite.from_code, invite.to_code].sort().join('-');
+  if (!invites[invite.from_code]) invites[invite.from_code] = [];
+  invites[invite.from_code].push({ ... });
+}
 
     res.json({ ok: true, invite: result.rows[0] });
   } catch (e) {
