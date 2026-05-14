@@ -285,7 +285,7 @@ let saveTimer  = null;
 let toastTimer;
 
 // ── NAVIGATION ───────────────────────────────────────────────────────────────
-function goBack() { window.location.href = 'index.html'; }
+function goBack() { window.location.href = 'spot-caching.html'; }
 
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -497,7 +497,7 @@ function loadProfile() {
   } catch(e) { console.warn('Ladefehler', e); }
 }
 
-function saveProfile() {
+async function saveProfile() {
   const name = document.getElementById('f-name').value.trim();
   if (!name) { toast('⚠️ Anzeigename ist Pflicht'); return; }
   const wishes = document.getElementById('f-wishes').value.trim();
@@ -511,9 +511,9 @@ function saveProfile() {
   const year = parseInt(yearVal);
   if (yearVal && (year < 1940 || year > 2007)) { toast('⚠️ Gültiges Geburtsjahr eingeben'); return; }
 
-  const existing = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
-  const wishArray  = wishes.split(',').map(s => s.trim()).filter(Boolean);
-  const offerArray = offers.split(',').map(s => s.trim()).filter(Boolean);
+  const existing    = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+  const wishArray   = wishes.split(',').map(s => s.trim()).filter(Boolean);
+  const offerArray  = offers.split(',').map(s => s.trim()).filter(Boolean);
 
   const profile = {
     name, year: year || existing.year || null,
@@ -534,17 +534,37 @@ function saveProfile() {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   localStorage.setItem('sm_name', name);
 
-  // Server-Sync
-  const token = localStorage.getItem('sm_token');
-  if (token) {
-    fetch(`${API_BASE}/profile`, {
+  // Code generieren falls noch nicht vorhanden
+  let code = localStorage.getItem('sm_code');
+  if (!code) {
+    code = Math.random().toString(36).slice(2,8).toUpperCase();
+    localStorage.setItem('sm_code', code);
+  }
+
+  // Server-Sync — Token holen/bestätigen
+  let token = localStorage.getItem('sm_token');
+  try {
+    const res = await fetch(`${API_BASE}/profile`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        code: localStorage.getItem('sm_code'), name, spot: SPOT,
+        code, name, spot: SPOT,
         region: profile.region, province: profile.province, city: profile.city,
-        bio: profile.bio, wishTags: wishArray, offerTags: offerArray, token
+        bio: profile.bio, wishTags: wishArray, offerTags: offerArray,
+        token: token || undefined
       })
-    }).catch(()=>{});
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.token) {
+        token = data.token;
+        localStorage.setItem('sm_token', token);
+      }
+    }
+  } catch { toast('⚠️ Server nicht erreichbar – nur lokal gespeichert'); }
+
+  // Avatar hochladen NACH Token-Erhalt
+  if (avatarData && token && code) {
+    uploadAvatarToServer();
   }
 
   showSavedBadge();
