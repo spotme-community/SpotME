@@ -1125,14 +1125,18 @@ app.patch('/api/spotcache/invite/:id', async (req, res) => {
       return res.status(403).json({ error: 'Nicht berechtigt' });
     }
 
-   
+
 if (status === 'accepted') {
   const invite = result.rows[0];
   const room = [invite.from_code, invite.to_code].sort().join('-');
   if (!invites[invite.from_code]) invites[invite.from_code] = [];
-  invites[invite.from_code].push({ ... });
-}
-
+  invites[invite.from_code].push({   // ← hier öffnet ein Objekt
+    from: invite.to_code,
+    to: invite.from_code,
+    ts: Date.now(),
+    room
+  });                                 // ← Objekt geschlossen
+}                                     // ← if-Block geschlossen
     res.json({ ok: true, invite: result.rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
