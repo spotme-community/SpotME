@@ -853,11 +853,11 @@ function openDrawer(type) {
 function closeDrawer() {
   // NEU: Chat aufräumen wenn Drawer geschlossen wird
   stopChatPolling();
-  let chatMyCode      = null;
-  let chatPartnerCode = null;
-  let chatPartnerName = null;
-  let chatRoom        = null;
-  let chatPollTimer   = null;
+  chatMyCode      = null;
+  chatPartnerCode = null;
+  chatPartnerName = null;
+  chatRoom        = null;
+  chatPollTimer   = null;
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('show');
   // Neue-Spot-Marker aufräumen
