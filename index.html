@@ -199,6 +199,94 @@
 
     ::-webkit-scrollbar { width:4px; }
     ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+  
+  /* ── Chat Drawer ─────────────────────────────────────────────────────── */
+.chat-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 52vh;          /* passt sich dem Drawer an */
+}
+.chat-partner-bar {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--acc);
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--bord);
+  margin-bottom: 0.5rem;
+  flex-shrink: 0;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-bottom: 0.5rem;
+}
+/* Eigene Nachrichten: rechts in Orange */
+.chat-bubble {
+  max-width: 78%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 14px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: var(--acc);
+  color: #0a0d12;
+  border-bottom-right-radius: 4px;
+}
+/* Partner-Nachrichten: links in Dunkel */
+.chat-bubble.theirs {
+  align-self: flex-start;
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--bord2);
+  border-bottom-left-radius: 4px;
+}
+.chat-bubble-author {
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin-bottom: 3px;
+  display: block;
+}
+.chat-bubble-time {
+  font-size: 0.6rem;
+  opacity: 0.55;
+  margin-top: 3px;
+  text-align: right;
+}
+.chat-input-row {
+  display: flex;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--bord);
+  flex-shrink: 0;
+}
+.chat-input {
+  flex: 1;
+  padding: 0.6rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--bord2);
+  border-radius: 100px;
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.88rem;
+  outline: none;
+}
+.chat-input:focus { border-color: rgba(245,158,11,0.5); }
+.chat-send-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%; border: none;
+  background: var(--acc); color: #0a0d12;
+  font-size: 1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.chat-send-btn:active { opacity: 0.7; }
+  
   </style>
 </head>
 <body>
