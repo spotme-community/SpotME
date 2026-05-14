@@ -850,6 +850,11 @@ function openDrawer(type) {
 }
 
 function closeDrawer() {
+  // NEU: Chat aufräumen wenn Drawer geschlossen wird
+  stopChatPolling();
+  chatPartnerCode = null;
+  chatRoom        = null;
+  chatMyCode = null;
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('show');
   // Neue-Spot-Marker aufräumen
@@ -891,6 +896,7 @@ async function loadInvitesIntoDrawer(body) {
       ${inv.status==='accepted'?`<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
         <button class="sc-btn navigate" style="flex:1;padding:0.65rem;" data-nav-spot="${inv.spotId||''}">🧭 Route</button>
         <button class="sc-btn primary" style="flex:1;padding:0.65rem;" data-ci="${inv.id}">📍 Check-in</button>
+        <button class="sc-btn success" style="padding:0.65rem 0.9rem;" data-chat="${inv.from_code === CODE ? inv.to_code : inv.from_code}" data-chatname="${esc(inv.spot_name || '')}">💬</button>
       </div>`:''}
     </div>`;
   }).join('');
@@ -900,6 +906,10 @@ async function loadInvitesIntoDrawer(body) {
     const s=allSpots.find(x=>x.id==b.dataset.navSpot); if(s) navigateToSpot(s.lat,s.lng);
   }));
   body.querySelectorAll('[data-ci]').forEach(b=>b.addEventListener('click',()=>checkIn(+b.dataset.ci)));
+  // Chat-Button in der Einladungsliste
+  body.querySelectorAll('[data-chat]').forEach(b =>b.addEventListener('click', () => { openChatDrawer(b.dataset.chat, b.dataset.chatname || b.dataset.chat);
+  })
+);
 }
 
 function openInviteFromSpot(spotId, name, wish) {
@@ -962,79 +972,354 @@ function updateInviteBadge(n) {
   if(n>0){b.style.display='flex';b.textContent=n;}else{b.style.display='none';}
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// CHAT DRAWER
+// Logik übernommen aus messenger.html – angepasst für Drawer-Integration
+// ══════════════════════════════════════════════════════════════════════
+
+// Der Storage-Prefix bleibt identisch mit messenger.html,
+// damit Nachrichten zwischen beiden Versionen kompatibel bleiben.
+const CHAT_PREFIX = 'sm_local_msg_';
+
+// Diese drei Variablen beschreiben den aktuellen Chat-Zustand.
+// Sie sind null wenn kein Chat offen ist.
+let chatMyCode      = null;
+let chatPartnerCode = null;
+let chatRoom        = null;
+let chatPollTimer   = null;
+
+// ── Schlüssel-Berechnung ──────────────────────────────────────────────
+// Beide Codes werden sortiert zusammengefügt, damit egal wer den Chat
+// öffnet, immer derselbe localStorage-Schlüssel herauskommt.
+// Beispiel: Code "ABC" chattet mit "XYZ" → Schlüssel: "sm_local_msg_ABC-XYZ"
+function buildChatRoom(a, b) {
+  return [a, b].sort().join('-');
+}
+
+// ── Nachrichten aus localStorage lesen und schreiben ─────────────────
+function getChatMessages() {
+  if (!chatRoom) return [];
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_PREFIX + chatRoom) || '[]');
+  } catch { return []; }
+}
+
+function saveChatMessages(msgs) {
+  if (!chatRoom) return;
+  localStorage.setItem(CHAT_PREFIX + chatRoom, JSON.stringify(msgs));
+}
+
+// ── Nachrichten rendern ───────────────────────────────────────────────
+// Wird nach jedem Senden und nach jedem Poll aufgerufen.
+function renderChatMessages() {
+  const container = document.getElementById('chatMsgs');
+  if (!container) return;
+
+  const msgs = getChatMessages();
+  if (!msgs.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:1rem 0;">
+      <div class="es-icon">💬</div>Noch keine Nachrichten.</div>`;
+    return;
+  }
+
+  container.innerHTML = msgs.map(m => {
+    const isMine = m.from === chatMyCode;
+    const time   = new Date(m.ts).toLocaleTimeString('de-DE',
+                   { hour: '2-digit', minute: '2-digit' });
+    return `<div class="chat-bubble ${isMine ? 'mine' : 'theirs'}">
+      ${!isMine
+        ? `<span class="chat-bubble-author">${esc(m.fromName || chatPartnerCode)}</span>`
+        : ''}
+      ${esc(m.text)}
+      <div class="chat-bubble-time">${time}</div>
+    </div>`;
+  }).join('');
+
+  // Automatisch nach unten scrollen – neueste Nachricht immer sichtbar
+  container.scrollTop = container.scrollHeight;
+}
+
+// ── Nachricht senden ──────────────────────────────────────────────────
+// Erst lokal speichern (sofortige Anzeige), dann an den Server schicken.
+// Falls der Server nicht erreichbar ist, bleibt die Nachricht lokal erhalten.
+async function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text || !chatPartnerCode) return;
+
+  // Profilname aus localStorage holen – so sieht der Partner einen echten Namen
+  const myName = JSON.parse(localStorage.getItem('sm_profile_caching') || '{}').name || chatMyCode;
+
+  // Sofort lokal speichern und anzeigen
+  const msgs = getChatMessages();
+  msgs.push({ from: chatMyCode, fromName: myName, text, ts: Date.now() });
+  saveChatMessages(msgs);
+  input.value = '';
+  renderChatMessages();
+
+  // An den Server schicken (offline_messages Tabelle)
+  try {
+    await fetch(`${API}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient:   chatPartnerCode,
+        sender_code: chatMyCode,
+        sender_name: myName,
+        message:     text,
+        spot_type:   'caching_chat'  // Eigener Typ – trennt Chat von Einladungen
+      })
+    });
+  } catch { /* Server offline – kein Problem, lokal ist gespeichert */ }
+}
+
+// ── Server-Polling ────────────────────────────────────────────────────
+// Fragt alle 4 Sekunden ob der Partner neue Nachrichten geschickt hat.
+// Läuft nur solange der Chat-Drawer offen ist.
+function startChatPolling() {
+  stopChatPolling(); // Zuerst alten Timer stoppen um Doppel-Polls zu vermeiden
+  chatPollTimer = setInterval(async () => {
+    if (!chatPartnerCode || !chatMyCode) return;
+    try {
+      const r = await fetch(`${API}/messages/${chatMyCode}?spot_type=caching_chat`);
+      if (!r.ok) return;
+      const newMsgs = await r.json();
+
+      // Nur Nachrichten vom aktuellen Partner verarbeiten
+      const fromPartner = newMsgs.filter(m => m.sender_code === chatPartnerCode);
+      if (!fromPartner.length) return;
+
+      const existing = getChatMessages();
+      let hasNew = false;
+
+      fromPartner.forEach(m => {
+        // Duplikat-Schutz: Text + Zeitstempel vergleichen (±5 Sek. Toleranz)
+        // Das verhindert dass dieselbe Nachricht doppelt erscheint
+        const isDuplicate = existing.some(e =>
+          e.from === m.sender_code &&
+          e.text === m.message &&
+          Math.abs(e.ts - new Date(m.created_at).getTime()) < 5000
+        );
+        if (!isDuplicate) {
+          existing.push({
+            from:     m.sender_code,
+            fromName: m.sender_name,
+            text:     m.message,
+            ts:       new Date(m.created_at).getTime()
+          });
+          hasNew = true;
+        }
+      });
+
+      // Nur neu rendern wenn wirklich etwas Neues angekommen ist
+      if (hasNew) {
+        saveChatMessages(existing);
+        renderChatMessages();
+      }
+    } catch {}
+  }, 4000);
+}
+
+function stopChatPolling() {
+  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+}
+
+// ── Chat-Drawer öffnen ────────────────────────────────────────────────
+// Das ist der Einstiegspunkt der von openSpotDetail() und
+// loadInvitesIntoDrawer() aufgerufen wird.
+function openChatDrawer(partnerCode, partnerName) {
+  chatMyCode      = CODE; // CODE kommt aus dem globalen Scope der index.html
+  chatPartnerCode = partnerCode;
+  chatPartnerName = partnerName || partnerCode;
+  chatRoom        = buildChatRoom(CODE, partnerCode);
+  currentDrawer   = 'chat';
+
+  document.getElementById('drawerTitle').textContent = '💬 CHAT';
+  document.getElementById('drawerOverlay').classList.add('show');
+  document.getElementById('drawer').classList.add('open');
+
+  // Drawer-Body mit dem Chat-Layout befüllen
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="chat-wrap">
+
+      <div class="chat-partner-bar">
+        💬 ${esc(chatPartnerName)}
+        <span style="color:var(--muted);font-weight:400;"> · ${partnerCode}</span>
+      </div>
+
+      <div class="chat-messages" id="chatMsgs"></div>
+
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput"
+               placeholder="Nachricht…" maxlength="280"
+               onkeydown="if(event.key==='Enter') sendChatMsg()">
+        <button class="chat-send-btn" onclick="sendChatMsg()">➤</button>
+      </div>
+
+    </div>
+  `;
+
+  // Bestehende Nachrichten sofort anzeigen, dann Polling starten
+  renderChatMessages();
+  startChatPolling();
+}
+
 // ── SPOT DETAIL ──────────────────────────────────────────────────────────────
+
 async function openSpotDetail(spotId) {
-  const spot=allSpots.find(s=>s.id===spotId); if(!spot){toast('⚠️ Nicht gefunden');return;}
-  detailSpot=spot;
-  document.getElementById('spotDetailContent').innerHTML=`<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+
+  // Spot aus dem lokalen Array suchen – wenn nicht gefunden, abbrechen
+  const spot = allSpots.find(s => s.id === spotId);
+  if (!spot) { toast('⚠️ Nicht gefunden'); return; }
+
+  detailSpot = spot;
+
+  // Sofort einen Lade-Platzhalter zeigen, damit der Nutzer Feedback bekommt
+  document.getElementById('spotDetailContent').innerHTML =
+    `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
   document.getElementById('spotDetailModal').classList.add('show');
 
-  // Mini-Karte
-  const mapEl=document.getElementById('spotDetailMap');
-  mapEl.innerHTML=''; mapEl.style.display='block';
-  if (detailMiniMap) { detailMiniMap.remove(); detailMiniMap=null; }
-  setTimeout(()=>{
-    detailMiniMap=new maplibregl.Map({container:'spotDetailMap',style:'https://tiles.openfreemap.org/styles/liberty',center:[spot.lng,spot.lat],zoom:14,interactive:false,attributionControl:false});
-    detailMiniMap.on('load',()=>{
-      const el=document.createElement('div'); el.className='my-spot-marker';
-      new maplibregl.Marker({element:el}).setLngLat([spot.lng,spot.lat]).addTo(detailMiniMap);
+  // ── Mini-Karte ────────────────────────────────────────────────────────────
+  // Die Karte wird in einem setTimeout gestartet, damit das Modal
+  // erst vollständig gerendert ist bevor MapLibre die Größe berechnet.
+  const mapEl = document.getElementById('spotDetailMap');
+  mapEl.innerHTML = ''; mapEl.style.display = 'block';
+  if (detailMiniMap) { detailMiniMap.remove(); detailMiniMap = null; }
+  setTimeout(() => {
+    detailMiniMap = new maplibregl.Map({
+      container: 'spotDetailMap',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [spot.lng, spot.lat],
+      zoom: 14,
+      interactive: false,
+      attributionControl: false
+    });
+    detailMiniMap.on('load', () => {
+      const el = document.createElement('div');
+      el.className = 'my-spot-marker';
+      new maplibregl.Marker({ element: el }).setLngLat([spot.lng, spot.lat]).addTo(detailMiniMap);
       if (userPos) {
-        const uel=document.createElement('div'); uel.className='user-marker';
-        new maplibregl.Marker({element:uel}).setLngLat([userPos.lng,userPos.lat]).addTo(detailMiniMap);
-        const bounds=new maplibregl.LngLatBounds([spot.lng,spot.lat],[userPos.lng,userPos.lat]);
-        detailMiniMap.fitBounds(bounds,{padding:40,duration:0});
+        const uel = document.createElement('div');
+        uel.className = 'user-marker';
+        new maplibregl.Marker({ element: uel }).setLngLat([userPos.lng, userPos.lat]).addTo(detailMiniMap);
+        const bounds = new maplibregl.LngLatBounds([spot.lng, spot.lat], [userPos.lng, userPos.lat]);
+        detailMiniMap.fitBounds(bounds, { padding: 40, duration: 0 });
       }
     });
-  },100);
+  }, 100);
 
-  const isOnline=onlineSet.has(spot.code);
-  let profile=null, avatarData=null, spotImage=spot.image||null;
+  // ── Profil, Avatar und Bild parallel laden ────────────────────────────────
+  // Promise.all startet alle Anfragen gleichzeitig – das ist schneller
+  // als sie nacheinander zu starten (kein unnötiges Warten).
+  const isOnline = onlineSet.has(spot.code);
+  let profile = null, avatarData = null, spotImage = spot.image || null;
 
-  // Alles parallel laden — Profil, Avatar, und Bild falls nicht bereits geladen
   const fetches = [
     fetch(`${API}/profile/${spot.code}?spot=caching`),
     fetch(`${API}/avatar/${spot.code}?spot=caching`)
   ];
-  // Bild lazy nachladen wenn noch nicht im allSpots Objekt
+  // Bild nur nachladen wenn es noch nicht im allSpots-Objekt vorhanden ist
   if (!spotImage) {
-    fetches.push(fetch(`${API}/userspots/${spot.code}`).then(r=>r.ok?r.json():null));
+    fetches.push(fetch(`${API}/userspots/${spot.code}`).then(r => r.ok ? r.json() : null));
   }
   try {
     const results = await Promise.all(fetches);
-    if(results[0]?.ok) profile = await results[0].json();
-    if(results[1]?.ok) avatarData = await results[1].json();
+    if (results[0]?.ok) profile    = await results[0].json();
+    if (results[1]?.ok) avatarData = await results[1].json();
     if (fetches.length === 3 && results[2]) {
       const spotData = await results[2];
-      const match = Array.isArray(spotData) ? spotData.find(s=>s.id===spotId) : null;
+      const match = Array.isArray(spotData) ? spotData.find(s => s.id === spotId) : null;
       if (match?.image) spotImage = match.image;
     }
   } catch {}
 
-  const dist=userPos?(()=>{const d=Math.round(haversineKm(userPos.lat,userPos.lng,spot.lat,spot.lng)*1000);return d<1000?`${d}m`:`${(d/1000).toFixed(1)}km`;})():null;
-  const avHtml=avatarData?.avatar?`<img src="${avatarData.avatar}" alt="">`:((profile?.name?.[0]||'?').toUpperCase());
-  const wishes=(profile?.wishTags||profile?.wishes||[]).filter(Boolean);
-  const offers=(profile?.offerTags||profile?.offers||[]).filter(Boolean);
+  // ── Spot-Detail HTML rendern ──────────────────────────────────────────────
+  const dist = userPos ? (() => {
+    const d = Math.round(haversineKm(userPos.lat, userPos.lng, spot.lat, spot.lng) * 1000);
+    return d < 1000 ? `${d}m` : `${(d / 1000).toFixed(1)}km`;
+  })() : null;
 
-  document.getElementById('spotDetailContent').innerHTML=`
-    ${spotImage ? `<img src="${spotImage}" alt="" onclick="openImg('${spotImage}')" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:0.75rem;border:1px solid var(--bord2);cursor:zoom-in;">` : ''}
+  const avHtml = avatarData?.avatar
+    ? `<img src="${avatarData.avatar}" alt="">`
+    : ((profile?.name?.[0] || '?').toUpperCase());
+
+  const wishes = (profile?.wishTags || profile?.wishes || []).filter(Boolean);
+  const offers = (profile?.offerTags || profile?.offers || []).filter(Boolean);
+
+  document.getElementById('spotDetailContent').innerHTML = `
+    ${spotImage
+      ? `<img src="${spotImage}" alt="" onclick="openImg('${spotImage}')"
+             style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;
+                    margin-bottom:0.75rem;border:1px solid var(--bord2);cursor:zoom-in;">`
+      : ''}
     <div style="display:flex;gap:0.75rem;align-items:flex-start;margin-bottom:0.75rem;">
       <div class="spot-detail-avatar">${avHtml}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:700;font-size:1rem;">${esc(spot.name)}</div>
-        ${profile?.name?`<div style="font-size:0.78rem;color:var(--muted2);margin-top:2px;">👤 ${esc(profile.name)}${profile.age?` · ${profile.age} J.`:''}</div>`:''}
+        ${profile?.name
+          ? `<div style="font-size:0.78rem;color:var(--muted2);margin-top:2px;">
+               👤 ${esc(profile.name)}${profile.age ? ` · ${profile.age} J.` : ''}
+             </div>`
+          : ''}
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px;">
-          <span class="sc-tag">${spot.wishTag||''}</span>
-          ${isOnline?'<span style="font-size:0.68rem;color:var(--green);font-weight:600;font-family:\'Space Mono\',monospace;">● Online</span>':'<span style="font-size:0.68rem;color:var(--muted);font-family:\'Space Mono\',monospace;">○ Offline</span>'}
-          ${spotAgeHtml(spot.createdAt||spot.created_at)}
-          ${dist?`<span style="font-size:0.65rem;color:var(--muted);">📍 ${dist}</span>`:''}
+          <span class="sc-tag">${spot.wishTag || ''}</span>
+          ${isOnline
+            ? '<span style="font-size:0.68rem;color:var(--green);font-weight:600;font-family:\'Space Mono\',monospace;">● Online</span>'
+            : '<span style="font-size:0.68rem;color:var(--muted);font-family:\'Space Mono\',monospace;">○ Offline</span>'}
+          ${spotAgeHtml(spot.createdAt || spot.created_at)}
+          ${dist ? `<span style="font-size:0.65rem;color:var(--muted);">📍 ${dist}</span>` : ''}
         </div>
       </div>
     </div>
-    ${profile?.bio?`<div style="font-size:0.82rem;color:var(--muted2);line-height:1.55;padding:0.65rem;background:var(--card);border-radius:10px;border:1px solid var(--bord);margin-bottom:0.6rem;">${esc(profile.bio)}</div>`:''}
-    ${wishes.length?`<div style="margin-bottom:0.5rem;">${wishes.map(w=>`<span class="profile-chip">💭 ${esc(w)}</span>`).join('')}</div>`:''}
-    ${offers.length?`<div>${offers.map(o=>`<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('')}</div>`:''}
+    ${profile?.bio
+      ? `<div style="font-size:0.82rem;color:var(--muted2);line-height:1.55;padding:0.65rem;
+                     background:var(--card);border-radius:10px;border:1px solid var(--bord);
+                     margin-bottom:0.6rem;">${esc(profile.bio)}</div>`
+      : ''}
+    ${wishes.length
+      ? `<div style="margin-bottom:0.5rem;">
+           ${wishes.map(w => `<span class="profile-chip">💭 ${esc(w)}</span>`).join('')}
+         </div>`
+      : ''}
+    ${offers.length
+      ? `<div>${offers.map(o => `<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('')}</div>`
+      : ''}
   `;
+
+  // ── Button umschalten – NACH dem Rendern ──────────────────────────────────
+  // Jetzt ist profile geladen und der Button existiert im DOM.
+  // Wir prüfen ob bereits eine angenommene Einladung mit diesem Nutzer existiert.
+  // Falls ja → Chat-Button zeigen. Falls nein → Einladungs-Button zeigen.
+  let existingInvite = null;
+  try {
+    const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
+    if (ir.ok) {
+      const allInvites = await ir.json();
+      existingInvite = allInvites.find(inv =>
+        (inv.from_code === spot.code || inv.to_code === spot.code) &&
+        inv.status === 'accepted'
+      );
+    }
+  } catch {}
+
+  const invBtn = document.getElementById('spotDetailInviteBtn');
+  if (existingInvite) {
+    // Einladung ist bereits akzeptiert → Chat-Button anzeigen
+    invBtn.textContent = '💬 Chat öffnen';
+    invBtn.onclick = () => {
+      closeModals();
+      // profile?.name nutzt den echten Namen falls vorhanden, sonst den Code
+      openChatDrawer(spot.code, profile?.name || spot.code);
+    };
+  } else {
+    // Noch keine Verbindung → Einladungs-Button anzeigen
+    invBtn.textContent = '📨 Einladung senden';
+    invBtn.onclick = () => openInviteFromSpot(spot.id, spot.name, spot.wishTag);
+  }
+
 }
+
 
 // ── PROFILE ──────────────────────────────────────────────────────────────────
 async function showSpotOwnerProfile(ownerCode) {
