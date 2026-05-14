@@ -301,9 +301,9 @@
 
 <div class="topbar">
   <div class="logo"><div class="logo-dot"></div>SPOT<span style="color:var(--text);font-weight:400;">ME</span> <span class="logo-sub">Caching</span></div>
- <!-- <button class="icon-btn" onclick="location.href='index.html'">‹</button> -->
   <button class="icon-btn" onclick="location.href='profil-caching.html'">👤</button>
   <button class="icon-btn" id="inviteHeaderBtn" onclick="openDrawer('invites')">📨<span class="badge" id="inviteBadge" style="display:none">0</span></button>
+  <button class="icon-btn" onclick="openChatDrawer()">💬</button>
   <button class="icon-btn" onclick="location.reload()">↺</button>
 </div>
 
@@ -383,7 +383,6 @@
     <div id="spotDetailContent"><div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div></div>
     <div style="display:flex;gap:0.5rem;margin-top:1rem;">
       <button class="btn-ghost" style="flex:1;" id="spotDetailClose">Schließen</button>
-      <button class="btn-primary" style="flex:1;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.3);color:var(--cyan);" id="spotDetailChatBtn">💬 Chat</button>
       <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn">📨 Einladung senden</button>
     </div>
   </div>
@@ -1231,8 +1230,6 @@ async function openSpotDetail(spotId) {
     const results = await Promise.all(fetches);
     if (results[0]?.ok) profile    = await results[0].json();
     if (results[1]?.ok) avatarData = await results[1].json();
-    // Owner-Namen für Chat-Button merken
-    if (profile?.name) detailSpot._ownerName = profile.name;
     if (fetches.length === 3 && results[2]) {
       const spotData = await results[2];
       const match = Array.isArray(spotData) ? spotData.find(s => s.id === spotId) : null;
@@ -1554,17 +1551,6 @@ document.getElementById('spotPhotoClear').addEventListener('click', () => {
 document.getElementById('inviteModalCancel').addEventListener('click', closeModals);
 document.getElementById('inviteModalSend').addEventListener('click', sendInvite);
 document.getElementById('spotDetailClose').addEventListener('click', closeModals);
-
-// Chat-Button im Detail-Modal — immer sichtbar, öffnet Chat mit Spot-Inhaber
-document.getElementById('spotDetailChatBtn').addEventListener('click', () => {
-  if (!detailSpot) return;
-  closeModals();
-  setTimeout(() => {
-    const profile = JSON.parse(localStorage.getItem('sm_profile_caching') || '{}');
-    const name = detailSpot._ownerName || detailSpot.code;
-    openChatDrawer(detailSpot.code, name);
-  }, 300);
-});
 
 document.getElementById('profileModalClose').addEventListener('click', closeModals);
 document.getElementById('radiusClear').addEventListener('click', ()=>{clearRadius();closeModals();});
