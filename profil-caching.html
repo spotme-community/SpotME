@@ -553,14 +553,19 @@ async function saveProfile() {
         token: token || undefined
       })
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.token) {
-        token = data.token;
-        localStorage.setItem('sm_token', token);
-      }
+    const data = await res.json();
+    console.log('Server response:', res.status, JSON.stringify(data));
+    if (res.ok && data.token) {
+      token = data.token;
+      localStorage.setItem('sm_token', token);
+      console.log('Token gespeichert:', token.slice(0,8)+'…');
+    } else if (!res.ok) {
+      toast('⚠️ Server: ' + (data.error || res.status));
     }
-  } catch { toast('⚠️ Server nicht erreichbar – nur lokal gespeichert'); }
+  } catch(e) {
+    console.error('Fetch error:', e);
+    toast('⚠️ Server nicht erreichbar – nur lokal gespeichert');
+  }
 
   // Avatar hochladen NACH Token-Erhalt
   if (avatarData && token && code) {
@@ -578,7 +583,7 @@ function autoSave() {
     if (!document.getElementById('f-wishes').value.trim()) return;
     if (!document.getElementById('f-offers').value.trim()) return;
     if (!document.getElementById('f-region').value) return;
-    saveProfile();
+    saveProfile(); // async, fire and forget
   }, 1500);
 }
 
@@ -645,7 +650,8 @@ function loadAccountInfo() {
   const code  = localStorage.getItem('sm_code')  || '——';
   const token = localStorage.getItem('sm_token') || '——';
   document.getElementById('code-display').textContent = code;
-  document.getElementById('token-display').value = token.slice(0,16) + '…';
+  document.getElementById('token-display').value =
+    token === '——' ? '—— noch nicht vergeben' : token.slice(0,16) + '…';
 }
 
 function exportProfile() {
