@@ -1041,11 +1041,20 @@ setInterval(() => {
   }
 }, 60000);
 
-app.post('/api/invites/send', (req, res) => {
-  const { from, to } = req.body;
+// Einladung zum Messenger
+
+app.post('/api/invites/send', async (req, res) => {
+  const { from, to, spot_id } = req.body; // spot_id NEU hinzufügen
+
   if (!from || !to || from.length !== 6 || to.length !== 6) {
     return res.status(400).json({ error: 'Ungültige Codes' });
   }
+  if (from === to) {
+    return res.status(400).json({ error: 'Selbst-Einladung nicht möglich' });
+  }
+
+  // ── RAM (wie bisher) ──────────────────────────────────────────────────────
+  // Das bleibt komplett gleich – für den lokalen Messenger-Tab
   if (!invites[to]) invites[to] = [];
   const exists = invites[to].find(i => i.from === from);
   if (!exists) {
@@ -1053,19 +1062,89 @@ app.post('/api/invites/send', (req, res) => {
     invites[to].push({ from, to, ts: Date.now(), room });
     console.log(`📨 Einladung: ${from} → ${to} (Raum ${room})`);
   }
-  res.json({ success: true });
-});
 
-app.get('/api/invites/:code', (req, res) => {
-  res.json(invites[req.params.code] || []);
-});
-
-app.delete('/api/invites/:code/:fromCode', (req, res) => {
-  if (invites[req.params.code]) {
-    invites[req.params.code] = invites[req.params.code].filter(i => i.from !== req.params.fromCode);
+  // ── Datenbank (NEU) ───────────────────────────────────────────────────────
+  // Nur wenn eine spot_id mitgeschickt wurde (SpotCaching-Kontext)
+  // Normale Messenger-Einladungen ohne Spot bleiben rein RAM-basiert
+  if (spot_id) {
+    try {
+      const now = Date.now();
+      await pool.query(
+        `INSERT INTO spot_cache_invites
+           (from_code, to_code, spot_id, time_start, time_end, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+         ON CONFLICT DO NOTHING`, // Keine doppelten Einladungen
+        [from, to, spot_id, now, now + 7 * 24 * 60 * 60 * 1000, now]
+      );
+    } catch (e) {
+      // Datenbankfehler darf den RAM-Pfad nicht blockieren
+      console.error('DB invite error:', e.message);
+    }
   }
+
   res.json({ success: true });
 });
+
+// Liefert alle Einladungen für einen Nutzer (als Sender UND Empfänger)
+// inklusive Status – das ist der Unterschied zum RAM-Endpunkt
+app.get('/api/spotcache/invites/:code', async (req, res) => {
+  const { code } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT i.*, u.name AS spot_name
+       FROM spot_cache_invites i
+       JOIN user_spots u ON u.id = i.spot_id
+       WHERE i.from_code = $1 OR i.to_code = $1
+       ORDER BY i.created_at DESC`,
+      [code]
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Einladung annehmen oder ablehnen
+app.patch('/api/spotcache/invite/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status, code } = req.body;
+
+  if (!['accepted', 'declined'].includes(status)) {
+    return res.status(400).json({ error: 'Ungültiger Status' });
+  }
+
+  try {
+    const result = await pool.query(
+      // Nur der Empfänger (to_code) darf antworten – Sicherheits-Check
+      `UPDATE spot_cache_invites SET status = $1
+       WHERE id = $2 AND to_code = $3
+       RETURNING *`,
+      [status, id, code]
+    );
+    if (result.rowCount === 0) {
+      return res.status(403).json({ error: 'Nicht berechtigt' });
+    }
+
+    // Wenn angenommen: auch den RAM-Kanal aktivieren
+    // damit der Messenger sofort reagieren kann
+    if (status === 'accepted') {
+      const invite = result.rows[0];
+      const room = [invite.from_code, invite.to_code].sort().join('-');
+      if (!invites[invite.from_code]) invites[invite.from_code] = [];
+      invites[invite.from_code].push({
+        from: invite.to_code,
+        to: invite.from_code,
+        ts: Date.now(),
+        room
+      });
+    }
+
+    res.json({ ok: true, invite: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN – Avatar Moderation
