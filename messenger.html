@@ -355,27 +355,60 @@ function renderLocalMessages() {
   container.scrollTop = container.scrollHeight;
 }
 
-function sendLocalMsg() {
+async function sendMsg() {
   const input = document.getElementById('local-msg-input');
   const text = input.value.trim();
-  if (!text) return;
-  
+  if (!text || !localPartnerCode) return;
+
   const myName = localStorage.getItem('sm_name') || localMyCode;
+
+  // Nachricht sofort lokal anzeigen (fühlt sich schneller an)
   const msgs = getLocalMessages();
-  msgs.push({
-    from: localMyCode,
-    fromName: myName,
-    text: text,
-    ts: Date.now()
-  });
+  msgs.push({ from: localMyCode, fromName: myName, text, ts: Date.now() });
   saveLocalMessages(msgs);
-  input.value = '';
   renderLocalMessages();
-  
-  if (localBC) localBC.postMessage({ type: 'new_local_msg' });
-  
-  // Auch Einladung senden, falls der andere noch nicht beigetreten ist
-  if (localPartnerCode) addInvite(localMyCode, localPartnerCode);
+  input.value = '';
+
+  // Gleichzeitig an den Server schicken
+  // Der Server speichert sie in der offline_messages Tabelle
+  await fetch(`${API_BASE}/api/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      recipient: localPartnerCode,  // ← Empfänger-Code
+      sender_code: localMyCode,
+      sender_name: myName,
+      message: text,
+      spot_type: 'caching'          // ← damit man weiß, woher die Nachricht kommt
+    })
+  });
+}
+
+function startMessagePolling() {
+  setInterval(async () => {
+    if (!localMyCode || !localChatRoom) return;
+
+    const res = await fetch(`${API_BASE}/api/messages/${localMyCode}`);
+    const newMsgs = await res.json();
+
+    if (newMsgs.length > 0) {
+      // Neue Nachrichten in den lokalen Speicher einfügen
+      const existing = getLocalMessages();
+      newMsgs.forEach(m => {
+        // Nur Nachrichten vom Chatpartner einfügen, keine Duplikate
+        if (m.sender_code === localPartnerCode) {
+          existing.push({
+            from: m.sender_code,
+            fromName: m.sender_name,
+            text: m.message,
+            ts: new Date(m.created_at).getTime()
+          });
+        }
+      });
+      saveLocalMessages(existing);
+      renderLocalMessages();
+    }
+  }, 3000); // alle 3 Sekunden nachfragen
 }
 
 function resetLocalChat() {
