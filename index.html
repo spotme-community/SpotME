@@ -852,9 +852,11 @@ function openDrawer(type) {
 function closeDrawer() {
   // NEU: Chat aufräumen wenn Drawer geschlossen wird
   stopChatPolling();
-  chatPartnerCode = null;
-  chatRoom        = null;
-  chatMyCode = null;
+  let chatMyCode      = null;
+  let chatPartnerCode = null;
+  let chatPartnerName = null;
+  let chatRoom        = null;
+  let chatPollTimer   = null;
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('show');
   // Neue-Spot-Marker aufräumen
@@ -879,7 +881,8 @@ async function loadInvitesIntoDrawer(body) {
   if (!invites.length) { body.innerHTML=`<div class="empty-state"><div class="es-icon">📨</div>Keine Einladungen.</div>`; return; }
 
   body.innerHTML=invites.map(inv=>{
-    const isSender=inv.from===CODE, now=Date.now();
+    const isSender=inv.from_code === CODE;
+    const now = Date.now();
     let statusHtml=inv.status==='pending'?`<span class="status-pill pending">⏳ Ausstehend</span>`:
       inv.status==='accepted'?(inv.timeStart<=now&&inv.timeEnd>=now?`<span class="status-pill now">🟢 JETZT!</span>`:`<span class="status-pill accepted">✅ Akzeptiert</span>`):'';
     const cd=inv.timeStart>now?`<span style="font-size:0.65rem;color:var(--muted);">⏰ ${formatCountdown(inv.timeStart)}</span>`:'';
@@ -1548,11 +1551,7 @@ document.getElementById('spotPhotoClear').addEventListener('click', () => {
 document.getElementById('inviteModalCancel').addEventListener('click', closeModals);
 document.getElementById('inviteModalSend').addEventListener('click', sendInvite);
 document.getElementById('spotDetailClose').addEventListener('click', closeModals);
-document.getElementById('spotDetailInviteBtn').addEventListener('click', ()=>{
-  if (!detailSpot) return;
-  closeModals();
-  setTimeout(()=>openInviteFromSpot(detailSpot.id,detailSpot.name,detailSpot.wishTag),300);
-});
+
 document.getElementById('profileModalClose').addEventListener('click', closeModals);
 document.getElementById('radiusClear').addEventListener('click', ()=>{clearRadius();closeModals();});
 document.getElementById('radiusClose').addEventListener('click', closeModals);
