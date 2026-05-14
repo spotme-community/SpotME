@@ -526,18 +526,20 @@ app.get('/api/profile/:code', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/avatar', async (req, res) => {
-  const { code, token, avatar, spot = 'gay' } = req.body;
+  const { code, token, avatar, spot = 'caching' } = req.body;
 
   if (!code || !token || !avatar) {
     return res.status(400).json({ error: 'code, token und avatar (Base64) erforderlich' });
   }
 
   try {
+    // Token über alle Spots dieses Codes prüfen
     const auth = await pool.query(
-      'SELECT token FROM profiles WHERE code = $1 AND spot = $2',
-      [code, spot]
+      'SELECT token, spot FROM profiles WHERE code = $1 AND token IS NOT NULL',
+      [code]
     );
-    if (!auth.rows.length || auth.rows[0].token !== token) {
+    const tokenValid = auth.rows.some(r => r.token === token);
+    if (!auth.rows.length || !tokenValid) {
       return res.status(403).json({ error: 'Ungültiger Token' });
     }
   } catch (e) {
@@ -564,6 +566,7 @@ app.post('/api/avatar', async (req, res) => {
   }
 
   try {
+    // Auf allen Spots dieses Codes updaten
     await pool.query(
       'UPDATE profiles SET avatar = $1, avatar_status = $2, updated_at = $3 WHERE code = $4 AND spot = $5',
       [avatar, 'pending', Date.now(), code, spot]
@@ -605,7 +608,7 @@ app.get('/api/avatar/:code', async (req, res) => {
 app.delete('/api/avatar/:code', async (req, res) => {
   const { code } = req.params;
   const token = req.body?.token || req.headers['x-spotme-token'];
-  const spot  = req.body?.spot  || 'gay';
+  const spot  = req.body?.spot  || 'caching';
 
   if (!token) {
     return res.status(401).json({ error: 'Token fehlt' });
@@ -613,10 +616,11 @@ app.delete('/api/avatar/:code', async (req, res) => {
 
   try {
     const auth = await pool.query(
-      'SELECT token FROM profiles WHERE code = $1 AND spot = $2',
-      [code, spot]
+      'SELECT token FROM profiles WHERE code = $1 AND token IS NOT NULL',
+      [code]
     );
-    if (!auth.rows.length || auth.rows[0].token !== token) {
+    const tokenValid = auth.rows.some(r => r.token === token);
+    if (!auth.rows.length || !tokenValid) {
       return res.status(403).json({ error: 'Ungültiger Token' });
     }
 
