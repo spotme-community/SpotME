@@ -858,7 +858,7 @@ function closeDrawer() {
   stopChatPolling();
   chatMyCode      = null;
   chatPartnerCode = null;
-  chatPartnerName = null;
+  let chatPartnerName = null;
   chatRoom        = null;
   chatPollTimer   = null;
   document.getElementById('drawer').classList.remove('open');
