@@ -415,8 +415,8 @@ app.post('/api/profile', async (req, res) => {
           help_mode=$11, help_category=$12,
           category=$13, bio=$14,
           wish_tags=$15, offer_tags=$16,
-          avatar        = COALESCE($22, avatar),
-          avatar_status = CASE WHEN $22 IS NOT NULL THEN 'pending' ELSE avatar_status END,
+          avatar        = COALESCE($21, avatar),
+          avatar_status = CASE WHEN $21 IS NOT NULL THEN 'pending' ELSE avatar_status END,
           updated_at=$17, visible_until=$18
          WHERE code=$19 AND spot=$20`,
         [
@@ -428,7 +428,7 @@ app.post('/api/profile', async (req, res) => {
           encrypt(JSON.stringify(wishTags || [])),
           encrypt(JSON.stringify(offerTags || [])),
           now, visibleUntil, code, spot,
-          avatar || null   // $22
+          avatar || null   // $21
         ]
       );
     } else {
@@ -442,7 +442,7 @@ app.post('/api/profile', async (req, res) => {
            wish_tags, offer_tags,
            avatar, avatar_status,
            token, updated_at, visible_until)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
         [
           code, spot, encrypt(name), age || null, region,
           province || null, city || null,
