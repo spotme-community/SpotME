@@ -290,7 +290,24 @@
   flex-shrink: 0;
 }
 .chat-send-btn:active { opacity: 0.7; }
-  
+
+/* Chat-Badge – blaue Variante um ihn vom orangen Einladungs-Badge zu unterscheiden */
+#chatBadge {
+  background: #22d3ee;   /* Cyan – passt zum Farbschema der App */
+  color: #0a0d12;
+}
+
+/* Sanfte Puls-Animation wenn neue Chat-Nachrichten da sind */
+/* Der Nutzer sieht sofort dass etwas Neues angekommen ist */
+#chatHeaderBtn.has-new {
+  animation: chatPulse 2s ease-in-out infinite;
+}
+
+@keyframes chatPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
   </style>
 </head>
 <body>
@@ -302,11 +319,26 @@
   <div class="pm-text">Spot platzieren</div>
   <div class="pm-sub">Tippe auf die Karte</div>
 </div>
-
-<div class="topbar">
-  <div class="logo"><div class="logo-dot"></div>SPOT<span style="color:var(--text);font-weight:400;">ME</span> <span class="logo-sub">Caching</span></div>
+  
+  <div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    SPOT<span style="color:var(--text);font-weight:400;">ME</span>
+    <span class="logo-sub">Caching</span>
+  </div>
   <button class="icon-btn" onclick="location.href='profil-caching.html'">👤</button>
-  <button class="icon-btn" id="inviteHeaderBtn" onclick="openDrawer('invites')">📨<span class="badge" id="inviteBadge" style="display:none">0</span></button>
+    📨<span class="badge" id="inviteBadge" style="display:none">0</span>
+  </button>
+
+  <!-- NEU: Chat-Benachrichtigungs-Button -->
+  <!-- Öffnet die Einladungsliste wo alle Chat-Kontakte sichtbar sind -->
+  <button class="icon-btn" id="chatHeaderBtn" onclick="openDrawer('invites')">
+    💬<span class="badge" id="chatBadge" style="display:none">0</span>
+  </button>
+
+  <button class="icon-btn" onclick="location.reload()">↺</button>
+</div>
+
   <button class="icon-btn" onclick="location.reload()">↺</button>
 </div>
 
@@ -384,10 +416,12 @@
     <div class="modal-handle"></div>
     <div id="spotDetailMap"></div>
     <div id="spotDetailContent"><div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div></div>
-    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-      <button class="btn-ghost" style="flex:1;" id="spotDetailClose">Schließen</button>
-      <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn">📨 Einladung senden</button>
-    </div>
+     <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+       <button class="btn-ghost" style="flex:1;" id="spotDetailClose">Schließen</button>
+       <button class="btn-primary" style="flex:1;background:var(--cyan);border-color:var(--cyan);" 
+          id="spotDetailChatBtn">💬 Chat</button>
+       <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn">📨 Einladung</button>
+     </div>
   </div>
 </div>
 
@@ -448,7 +482,8 @@ let invitePollInterval = null, knownInviteCount = 0;
 let toastTimer, currentDrawer = null;
 let activeRadius = null, detailSpot = null, detailMiniMap = null;
 let spotPhotoData = null;
-let editSpotId    = null; // null = neu anlegen, sonst ID des zu bearbeitenden Spots
+let editSpotId    = null;
+let chatPartnerName;
 
 function openSpotEdit(s) {
   const profile=JSON.parse(localStorage.getItem('sm_profile_caching')||'{}');
@@ -857,7 +892,7 @@ function closeDrawer() {
   stopChatPolling();
   chatMyCode      = null;
   chatPartnerCode = null;
-  let chatPartnerName = null;
+  chatPartnerName = null;
   chatRoom        = null;
   chatPollTimer   = null;
   document.getElementById('drawer').classList.remove('open');
@@ -973,6 +1008,102 @@ function startInvitePolling() {
     } catch {}
   },8000);
 }
+
+
+let globalChatPollTimer = null;
+
+function startGlobalChatPolling() {
+  // Sicherheit: alten Timer stoppen falls er bereits läuft
+  if (globalChatPollTimer) clearInterval(globalChatPollTimer);
+
+  globalChatPollTimer = setInterval(async () => {
+
+    // Nicht pollen wenn kein gültiger Code vorhanden ist
+    // (z.B. beim ersten Seitenaufruf bevor sich der Nutzer angemeldet hat)
+    if (!CODE || CODE === '000000') return;
+
+    try {
+      const r = await fetch(`${API}/messages/${CODE}?spot_type=caching_chat`);
+      if (!r.ok) return;
+      const newMsgs = await r.json();
+
+      // Keine neuen Nachrichten → nichts zu tun
+      if (!newMsgs.length) return;
+
+      // ── Nachrichten im localStorage speichern ─────────────────────────
+      // Jede Nachricht wird in den richtigen Chat-Raum einsortiert.
+      // buildChatRoom() und CHAT_PREFIX kommen aus dem Chat-Drawer-Block.
+      newMsgs.forEach(m => {
+        const room = buildChatRoom(CODE, m.sender_code);
+        const key  = CHAT_PREFIX + room;
+
+        // Bestehende Nachrichten aus dem localStorage lesen
+        let existing = [];
+        try { existing = JSON.parse(localStorage.getItem(key) || '[]'); } catch {}
+
+        // Duplikat-Schutz: dieselbe Nachricht nicht zweimal speichern.
+        // Wir vergleichen Text + Zeitstempel (±5 Sekunden Toleranz),
+        // weil created_at vom Server und ts vom Frontend minimal abweichen können.
+        const isDuplicate = existing.some(e =>
+          e.from === m.sender_code &&
+          e.text === m.message &&
+          Math.abs(e.ts - new Date(m.created_at).getTime()) < 5000
+        );
+
+        if (!isDuplicate) {
+          existing.push({
+            from:     m.sender_code,
+            fromName: m.sender_name,
+            text:     m.message,
+            ts:       new Date(m.created_at).getTime()
+          });
+          localStorage.setItem(key, JSON.stringify(existing));
+        }
+      });
+
+      // ── Badge anzeigen ────────────────────────────────────────────────
+      // Wir zeigen die Anzahl der verschiedenen ABSENDER, nicht die Anzahl
+      // der Nachrichten. 3 Nachrichten von 1 Person = Badge "1", nicht "3".
+      // Das fühlt sich natürlicher an – wie bei WhatsApp.
+      const senders = [...new Set(newMsgs.map(m => m.sender_code))];
+      showChatBadge(senders.length);
+
+      // ── Wenn Chat-Drawer bereits offen ist: sofort neu rendern ────────
+      // Falls Person B gerade den Chat mit Person A offen hat und Person A
+      // eine neue Nachricht schickt, soll sie sofort erscheinen –
+      // ohne dass Person B warten muss bis der 4-Sekunden-Drawer-Poll feuert.
+      if (currentDrawer === 'chat' && chatPartnerCode) {
+        renderChatMessages();
+      }
+
+    } catch {
+      // Netzwerkfehler stillschweigend ignorieren –
+      // der nächste Poll-Versuch kommt in 10 Sekunden automatisch
+    }
+
+  }, 10000); // alle 10 Sekunden
+}
+
+
+// ── BADGE ANZEIGEN / VERSTECKEN ───────────────────────────────────────────
+// Zeigt die Anzahl der Absender mit neuen Nachrichten am Chat-Icon an.
+// Bei count=0 wird der Badge ausgeblendet und die Puls-Animation gestoppt.
+
+function showChatBadge(count) {
+  const badge  = document.getElementById('chatBadge');
+  const btn    = document.getElementById('chatHeaderBtn');
+  if (!badge || !btn) return;
+
+  if (count > 0) {
+    badge.textContent = count > 9 ? '9+' : count; // max. "9+" anzeigen
+    badge.style.display = 'inline-block';
+    btn.classList.add('has-new');    // Puls-Animation starten
+  } else {
+    badge.style.display = 'none';
+    btn.classList.remove('has-new'); // Puls-Animation stoppen
+  }
+}
+
 function updateInviteBadge(n) {
   const b=document.getElementById('inviteBadge');
   if(n>0){b.style.display='flex';b.textContent=n;}else{b.style.display='none';}
@@ -1174,7 +1305,6 @@ function openChatDrawer(partnerCode, partnerName) {
 // ── SPOT DETAIL ──────────────────────────────────────────────────────────────
 
 async function openSpotDetail(spotId) {
-
   // Spot aus dem lokalen Array suchen – wenn nicht gefunden, abbrechen
   const spot = allSpots.find(s => s.id === spotId);
   if (!spot) { toast('⚠️ Nicht gefunden'); return; }
@@ -1187,8 +1317,6 @@ async function openSpotDetail(spotId) {
   document.getElementById('spotDetailModal').classList.add('show');
 
   // ── Mini-Karte ────────────────────────────────────────────────────────────
-  // Die Karte wird in einem setTimeout gestartet, damit das Modal
-  // erst vollständig gerendert ist bevor MapLibre die Größe berechnet.
   const mapEl = document.getElementById('spotDetailMap');
   mapEl.innerHTML = ''; mapEl.style.display = 'block';
   if (detailMiniMap) { detailMiniMap.remove(); detailMiniMap = null; }
@@ -1216,8 +1344,6 @@ async function openSpotDetail(spotId) {
   }, 100);
 
   // ── Profil, Avatar und Bild parallel laden ────────────────────────────────
-  // Promise.all startet alle Anfragen gleichzeitig – das ist schneller
-  // als sie nacheinander zu starten (kein unnötiges Warten).
   const isOnline = onlineSet.has(spot.code);
   let profile = null, avatarData = null, spotImage = spot.image || null;
 
@@ -1225,7 +1351,6 @@ async function openSpotDetail(spotId) {
     fetch(`${API}/profile/${spot.code}?spot=caching`),
     fetch(`${API}/avatar/${spot.code}?spot=caching`)
   ];
-  // Bild nur nachladen wenn es noch nicht im allSpots-Objekt vorhanden ist
   if (!spotImage) {
     fetches.push(fetch(`${API}/userspots/${spot.code}`).then(r => r.ok ? r.json() : null));
   }
@@ -1294,9 +1419,23 @@ async function openSpotDetail(spotId) {
   `;
 
   // ── Button umschalten – NACH dem Rendern ──────────────────────────────────
-  // Jetzt ist profile geladen und der Button existiert im DOM.
-  // Wir prüfen ob bereits eine angenommene Einladung mit diesem Nutzer existiert.
-  // Falls ja → Chat-Button zeigen. Falls nein → Einladungs-Button zeigen.
+  const isOwnSpot = spot.code === CODE;
+  const chatBtn = document.getElementById('spotDetailChatBtn');
+  const invBtn = document.getElementById('spotDetailInviteBtn');
+
+  if (isOwnSpot) {
+    chatBtn.style.display = 'none';
+    invBtn.style.display  = 'none';
+    return;
+  }
+
+  // Fremder Spot → Chat-Button immer aktiv
+  chatBtn.onclick = () => {
+    closeModals();
+    openChatDrawer(spot.code, profile?.name || spot.code);
+  };
+
+  // Prüfen ob bereits eine akzeptierte Einladung existiert
   let existingInvite = null;
   try {
     const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
@@ -1309,23 +1448,16 @@ async function openSpotDetail(spotId) {
     }
   } catch {}
 
-  const invBtn = document.getElementById('spotDetailInviteBtn');
   if (existingInvite) {
-    // Einladung ist bereits akzeptiert → Chat-Button anzeigen
-    invBtn.textContent = '💬 Chat öffnen';
-    invBtn.onclick = () => {
-      closeModals();
-      // profile?.name nutzt den echten Namen falls vorhanden, sonst den Code
-      openChatDrawer(spot.code, profile?.name || spot.code);
-    };
+    invBtn.textContent = '✅ Verbunden';
+    invBtn.style.opacity = '0.6';
+    invBtn.style.cursor  = 'default';
+    // kein onclick – Chat läuft über chatBtn
   } else {
-    // Noch keine Verbindung → Einladungs-Button anzeigen
-    invBtn.textContent = '📨 Einladung senden';
+    invBtn.textContent = '📨 Einladung';
     invBtn.onclick = () => openInviteFromSpot(spot.id, spot.name, spot.wishTag);
   }
-
 }
-
 
 // ── PROFILE ──────────────────────────────────────────────────────────────────
 async function showSpotOwnerProfile(ownerCode) {
