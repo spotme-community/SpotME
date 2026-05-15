@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// SPOTME SERVER v4.2 – PostgreSQL (inkl. SpotCache & Messenger Invites)
+// SPOTME SERVER v4.3 – PostgreSQL (inkl. SpotCache & Messenger Invites)
 //
 // Features:
 //   • 24h Offline-Sichtbarkeit  → visible_until Timestamp pro Profil
@@ -275,7 +275,7 @@ await pool.query(`
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image_status TEXT DEFAULT 'pending'`).catch(() => {});
-    console.log('✅ v4.2 – Alle Spalten bereit (inkl. SpotCache)');
+    console.log('✅ v4.3 – Alle Spalten bereit (inkl. SpotCache)');
   } catch (e) {
     console.log('ℹ️ Spalten existieren bereits oder konnten nicht angelegt werden');
   }
