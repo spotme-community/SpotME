@@ -384,12 +384,10 @@
     <div class="modal-handle"></div>
     <div id="spotDetailMap"></div>
     <div id="spotDetailContent"><div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div></div>
-     <div style="display:flex;gap:0.5rem;margin-top:1rem;">
-       <button class="btn-ghost" style="flex:1;" id="spotDetailClose">Schließen</button>
-       <button class="btn-primary" style="flex:1;background:var(--cyan);border-color:var(--cyan);" 
-          id="spotDetailChatBtn">💬 Chat</button>
-       <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn">📨 Einladung</button>
-     </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+      <button class="btn-ghost" style="flex:1;" id="spotDetailClose">Schließen</button>
+      <button class="btn-primary" style="flex:2;" id="spotDetailInviteBtn">📨 Einladung senden</button>
+    </div>
   </div>
 </div>
 
@@ -1328,52 +1326,6 @@ async function openSpotDetail(spotId) {
 
 }
 
-// ── Button-Logik NACH dem Rendern ─────────────────────────────────────
-
-// Eigenen Spot erkennen – keine Buttons nötig wenn man selbst der Inhaber ist
-const isOwnSpot = spot.code === CODE;
-
-const chatBtn   = document.getElementById('spotDetailChatBtn');
-const invBtn    = document.getElementById('spotDetailInviteBtn');
-
-if (isOwnSpot) {
-  // Eigener Spot → beide Buttons ausblenden
-  // Es macht keinen Sinn sich selbst eine Nachricht zu schicken
-  chatBtn.style.display = 'none';
-  invBtn.style.display  = 'none';
-} else {
-  // Fremder Spot → Chat-Button immer anzeigen
-  // Der Nutzer kann sofort eine Nachricht schicken, ohne vorherige Einladung
-  chatBtn.onclick = () => {
-    closeModals();
-    openChatDrawer(spot.code, profile?.name || spot.code);
-  };
-
-  // Einladungs-Button – prüfen ob bereits eine accepted-Einladung existiert
-  let existingInvite = null;
-  try {
-    const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
-    if (ir.ok) {
-      const allInvites = await ir.json();
-      existingInvite = allInvites.find(inv =>
-        (inv.from_code === spot.code || inv.to_code === spot.code) &&
-        inv.status === 'accepted'
-      );
-    }
-  } catch {}
-
-  if (existingInvite) {
-    // Einladung bereits akzeptiert → Button zeigt das an
-    invBtn.textContent = '✅ Verbunden';
-    invBtn.style.opacity = '0.6';
-    invBtn.style.cursor  = 'default';
-    // Kein onclick nötig – Chat-Button übernimmt die Kommunikation
-  } else {
-    // Noch keine Einladung → normaler Einladungs-Button
-    invBtn.textContent = '📨 Einladung';
-    invBtn.onclick = () => openInviteFromSpot(spot.id, spot.name, spot.wishTag);
-  }
-}
 
 // ── PROFILE ──────────────────────────────────────────────────────────────────
 async function showSpotOwnerProfile(ownerCode) {
