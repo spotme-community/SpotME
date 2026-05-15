@@ -578,6 +578,19 @@ async function saveProfile() {
   }
 
   showSavedBadge();
+  // Automatisch speichern nach 1,5 Sekunden Pause
+// Wird von den oninput-Handlern der Felder aufgerufen
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    // Nur speichern wenn Pflichtfelder ausgefüllt sind
+    if (!document.getElementById('f-name').value.trim()) return;
+    if (!document.getElementById('f-wishes').value.trim()) return;
+    if (!document.getElementById('f-offers').value.trim()) return;
+    if (!document.getElementById('f-region').value) return;
+    saveProfile(); // async, fire and forget
+  }, 1500);
+}
   toast('✅ Profil gespeichert');
 }
 
