@@ -389,7 +389,7 @@ function handleAvatar(input) {
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       const canvas = document.createElement('canvas');
       const maxW = 600; let w = img.width, h = img.height;
       if (w > maxW) { h = h * maxW / w; w = maxW; }
