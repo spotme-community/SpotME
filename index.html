@@ -451,7 +451,7 @@ let toastTimer, currentDrawer = null;
 let activeRadius = null, detailSpot = null, detailMiniMap = null;
 let spotPhotoData = null;
 let editSpotId    = null;
-let chatPartnerName = null;
+let chatPartnerName;
 
 function openSpotEdit(s) {
   const profile=JSON.parse(localStorage.getItem('sm_profile_caching')||'{}');
