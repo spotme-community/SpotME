@@ -570,22 +570,11 @@ async function saveProfile() {
 
   // Avatar hochladen NACH Token-Erhalt
   if (avatarData && token && code) {
-    uploadAvatarToServer();
+    await uploadAvatarToServer();
   }
 
   showSavedBadge();
   toast('✅ Profil gespeichert');
-}
-
-function autoSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (!document.getElementById('f-name').value.trim()) return;
-    if (!document.getElementById('f-wishes').value.trim()) return;
-    if (!document.getElementById('f-offers').value.trim()) return;
-    if (!document.getElementById('f-region').value) return;
-    saveProfile(); // async, fire and forget
-  }, 1500);
 }
 
 // ── MEINE SPOTS ──────────────────────────────────────────────────────────────
