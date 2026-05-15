@@ -327,17 +327,16 @@
     <span class="logo-sub">Caching</span>
   </div>
   <button class="icon-btn" onclick="location.href='profil-caching.html'">👤</button>
+
+  <button class="icon-btn" id="inviteHeaderBtn" onclick="openDrawer('invites')">
     📨<span class="badge" id="inviteBadge" style="display:none">0</span>
   </button>
 
-  <!-- NEU: Chat-Benachrichtigungs-Button -->
+  <!-- Chat-Benachrichtigungs-Button -->
   <!-- Öffnet die Einladungsliste wo alle Chat-Kontakte sichtbar sind -->
   <button class="icon-btn" id="chatHeaderBtn" onclick="openDrawer('invites')">
     💬<span class="badge" id="chatBadge" style="display:none">0</span>
   </button>
-
-  <button class="icon-btn" onclick="location.reload()">↺</button>
-</div>
 
   <button class="icon-btn" onclick="location.reload()">↺</button>
 </div>
@@ -483,7 +482,6 @@ let toastTimer, currentDrawer = null;
 let activeRadius = null, detailSpot = null, detailMiniMap = null;
 let spotPhotoData = null;
 let editSpotId    = null;
-let chatPartnerName;
 
 function openSpotEdit(s) {
   const profile=JSON.parse(localStorage.getItem('sm_profile_caching')||'{}');
@@ -844,6 +842,8 @@ function showNavToast(foot, car) {
 // ── DRAWER ───────────────────────────────────────────────────────────────────
 function openDrawer(type) {
   currentDrawer=type;
+  // Badge löschen wenn Einladungen/Chat geöffnet wird
+  if (type === 'invites') showChatBadge(0);
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerOverlay').classList.add('show');
   const title=document.getElementById('drawerTitle'), body=document.getElementById('drawerBody');
@@ -1122,6 +1122,7 @@ const CHAT_PREFIX = 'sm_local_msg_';
 // Sie sind null wenn kein Chat offen ist.
 let chatMyCode      = null;
 let chatPartnerCode = null;
+let chatPartnerName = null;  // Name des Chatpartners für die Anzeige im Drawer
 let chatRoom        = null;
 let chatPollTimer   = null;
 
@@ -1695,6 +1696,7 @@ document.getElementById('rc5').addEventListener('click', ()=>selectRadius(5));
 document.getElementById('rc10').addEventListener('click', ()=>selectRadius(10));
 
 initMap();
+startGlobalChatPolling(); // Hintergrund-Wächter: prüft alle 10 Sek. auf neue Chat-Nachrichten
 </script>
 </body>
 </html>
