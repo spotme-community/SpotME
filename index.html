@@ -1177,7 +1177,6 @@ function openChatDrawer(partnerCode, partnerName) {
 // ── SPOT DETAIL ──────────────────────────────────────────────────────────────
 
 async function openSpotDetail(spotId) {
-
   // Spot aus dem lokalen Array suchen – wenn nicht gefunden, abbrechen
   const spot = allSpots.find(s => s.id === spotId);
   if (!spot) { toast('⚠️ Nicht gefunden'); return; }
@@ -1190,8 +1189,6 @@ async function openSpotDetail(spotId) {
   document.getElementById('spotDetailModal').classList.add('show');
 
   // ── Mini-Karte ────────────────────────────────────────────────────────────
-  // Die Karte wird in einem setTimeout gestartet, damit das Modal
-  // erst vollständig gerendert ist bevor MapLibre die Größe berechnet.
   const mapEl = document.getElementById('spotDetailMap');
   mapEl.innerHTML = ''; mapEl.style.display = 'block';
   if (detailMiniMap) { detailMiniMap.remove(); detailMiniMap = null; }
@@ -1219,8 +1216,6 @@ async function openSpotDetail(spotId) {
   }, 100);
 
   // ── Profil, Avatar und Bild parallel laden ────────────────────────────────
-  // Promise.all startet alle Anfragen gleichzeitig – das ist schneller
-  // als sie nacheinander zu starten (kein unnötiges Warten).
   const isOnline = onlineSet.has(spot.code);
   let profile = null, avatarData = null, spotImage = spot.image || null;
 
@@ -1228,7 +1223,6 @@ async function openSpotDetail(spotId) {
     fetch(`${API}/profile/${spot.code}?spot=caching`),
     fetch(`${API}/avatar/${spot.code}?spot=caching`)
   ];
-  // Bild nur nachladen wenn es noch nicht im allSpots-Objekt vorhanden ist
   if (!spotImage) {
     fetches.push(fetch(`${API}/userspots/${spot.code}`).then(r => r.ok ? r.json() : null));
   }
@@ -1297,60 +1291,23 @@ async function openSpotDetail(spotId) {
   `;
 
   // ── Button umschalten – NACH dem Rendern ──────────────────────────────────
-  // Jetzt ist profile geladen und der Button existiert im DOM.
-  // Wir prüfen ob bereits eine angenommene Einladung mit diesem Nutzer existiert.
-  // Falls ja → Chat-Button zeigen. Falls nein → Einladungs-Button zeigen.
-  let existingInvite = null;
-  try {
-    const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
-    if (ir.ok) {
-      const allInvites = await ir.json();
-      existingInvite = allInvites.find(inv =>
-        (inv.from_code === spot.code || inv.to_code === spot.code) &&
-        inv.status === 'accepted'
-      );
-    }
-  } catch {}
-
+  const isOwnSpot = spot.code === CODE;
+  const chatBtn = document.getElementById('spotDetailChatBtn');
   const invBtn = document.getElementById('spotDetailInviteBtn');
-  if (existingInvite) {
-    // Einladung ist bereits akzeptiert → Chat-Button anzeigen
-    invBtn.textContent = '💬 Chat öffnen';
-    invBtn.onclick = () => {
-      closeModals();
-      // profile?.name nutzt den echten Namen falls vorhanden, sonst den Code
-      openChatDrawer(spot.code, profile?.name || spot.code);
-    };
-  } else {
-    // Noch keine Verbindung → Einladungs-Button anzeigen
-    invBtn.textContent = '📨 Einladung senden';
-    invBtn.onclick = () => openInviteFromSpot(spot.id, spot.name, spot.wishTag);
+
+  if (isOwnSpot) {
+    chatBtn.style.display = 'none';
+    invBtn.style.display  = 'none';
+    return;
   }
 
-}
-
-// ── Button-Logik NACH dem Rendern ─────────────────────────────────────
-
-// Eigenen Spot erkennen – keine Buttons nötig wenn man selbst der Inhaber ist
-const isOwnSpot = spot.code === CODE;
-
-const chatBtn   = document.getElementById('spotDetailChatBtn');
-const invBtn    = document.getElementById('spotDetailInviteBtn');
-
-if (isOwnSpot) {
-  // Eigener Spot → beide Buttons ausblenden
-  // Es macht keinen Sinn sich selbst eine Nachricht zu schicken
-  chatBtn.style.display = 'none';
-  invBtn.style.display  = 'none';
-} else {
-  // Fremder Spot → Chat-Button immer anzeigen
-  // Der Nutzer kann sofort eine Nachricht schicken, ohne vorherige Einladung
+  // Fremder Spot → Chat-Button immer aktiv
   chatBtn.onclick = () => {
     closeModals();
     openChatDrawer(spot.code, profile?.name || spot.code);
   };
 
-  // Einladungs-Button – prüfen ob bereits eine accepted-Einladung existiert
+  // Prüfen ob bereits eine akzeptierte Einladung existiert
   let existingInvite = null;
   try {
     const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
@@ -1364,13 +1321,11 @@ if (isOwnSpot) {
   } catch {}
 
   if (existingInvite) {
-    // Einladung bereits akzeptiert → Button zeigt das an
     invBtn.textContent = '✅ Verbunden';
     invBtn.style.opacity = '0.6';
     invBtn.style.cursor  = 'default';
-    // Kein onclick nötig – Chat-Button übernimmt die Kommunikation
+    // kein onclick – Chat läuft über chatBtn
   } else {
-    // Noch keine Einladung → normaler Einladungs-Button
     invBtn.textContent = '📨 Einladung';
     invBtn.onclick = () => openInviteFromSpot(spot.id, spot.name, spot.wishTag);
   }
