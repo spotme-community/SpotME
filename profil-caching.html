@@ -398,7 +398,7 @@ function handleAvatar(input) {
       avatarData = canvas.toDataURL('image/jpeg', 0.55);
       renderAvatar();
       statusEl.textContent = '⏳ Speichere…';
-      uploadAvatarToServer();
+      await saveProfile();
     };
     img.src = e.target.result;
   };
@@ -409,7 +409,7 @@ async function uploadAvatarToServer() {
   const token = localStorage.getItem('sm_token');
   const code  = localStorage.getItem('sm_code');
   const statusEl = document.getElementById('avatar-status');
-  autoSave();
+  
   if (!token || !code || !avatarData) {
     statusEl.textContent = '⚠️ Kein Token – nur lokal'; return;
   }
