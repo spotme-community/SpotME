@@ -51,7 +51,7 @@
     .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display:none !important; }
 
 .topbar {
-  position: fixed;           /* fixed statt absolute – bleibt immer im Viewport */
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
@@ -60,13 +60,10 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  /* env(safe-area-inset-top) sorgt für den richtigen Abstand
-     bei Geräten mit Notch, Dynamic Island oder Statusleiste */
   padding-top: max(0.75rem, env(safe-area-inset-top));
   background: linear-gradient(to bottom, rgba(10,13,18,0.95) 0%, transparent 100%);
   pointer-events: none;
 }
-    
     
     .topbar > * { pointer-events:all; }
     .logo { font-family:'Space Mono',monospace; font-size:1rem; font-weight:700; color:var(--acc); letter-spacing:0.05em; margin-right:auto; display:flex; align-items:center; gap:0.4rem; }
