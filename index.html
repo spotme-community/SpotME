@@ -1631,9 +1631,13 @@ async function openSpotDetail(spotId) {
     // kein onclick – Chat läuft über chatBtn
   } else {
     invBtn.textContent = '📨 Einladung';
-    invBtn.onclick = () => { closeModals(); setTimeout(() => openInviteFromSpot(spot.id, spot.name, spot.wishTag), 300);
-};
-}
+    invBtn.onclick = () => {
+      closeModals();
+      setTimeout(() => openInviteFromSpot(spot.id, spot.name, spot.wishTag), 300);
+    };
+  }
+
+} // ← schließende } von openSpotDetail()
 
 // ── PROFILE ──────────────────────────────────────────────────────────────────
 async function showSpotOwnerProfile(ownerCode) {
