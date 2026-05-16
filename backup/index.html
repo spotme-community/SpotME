@@ -2,10 +2,6 @@
 <html lang="de">
 <head>
 
-<!-- Eruda – Mobile Console (nur für Debugging) -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
 <meta name="mobile-web-app-capable" content="yes">
@@ -843,7 +839,7 @@ function showNavToast(foot, car) {
 function openDrawer(type) {
   currentDrawer=type;
   // Badge löschen wenn Einladungen/Chat geöffnet wird
-  if (type === 'invites') showChatBadge(0);
+  if (type === 'invites') updateChatBadgeFromStorage();
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerOverlay').classList.add('show');
   const title=document.getElementById('drawerTitle'), body=document.getElementById('drawerBody');
@@ -1013,37 +1009,34 @@ function startInvitePolling() {
 let globalChatPollTimer = null;
 
 function startGlobalChatPolling() {
-  // Sicherheit: alten Timer stoppen falls er bereits läuft
   if (globalChatPollTimer) clearInterval(globalChatPollTimer);
 
   globalChatPollTimer = setInterval(async () => {
 
     // Nicht pollen wenn kein gültiger Code vorhanden ist
-    // (z.B. beim ersten Seitenaufruf bevor sich der Nutzer angemeldet hat)
     if (!CODE || CODE === '000000') return;
 
     try {
       const r = await fetch(`${API}/messages/${CODE}?spot_type=caching_chat`);
       if (!r.ok) return;
       const newMsgs = await r.json();
-
-      // Keine neuen Nachrichten → nichts zu tun
       if (!newMsgs.length) return;
 
-      // ── Nachrichten im localStorage speichern ─────────────────────────
-      // Jede Nachricht wird in den richtigen Chat-Raum einsortiert.
-      // buildChatRoom() und CHAT_PREFIX kommen aus dem Chat-Drawer-Block.
+      // Ungelesen-Zähler aus dem localStorage laden
+      // Wir laden ihn einmal vor der Schleife, nicht für jede Nachricht einzeln –
+      // das ist effizienter und verhindert Race Conditions.
+      let unread = {};
+      try { unread = JSON.parse(localStorage.getItem('sm_unread_caching') || '{}'); } catch {}
+      let hadNewMessages = false;
+
       newMsgs.forEach(m => {
         const room = buildChatRoom(CODE, m.sender_code);
         const key  = CHAT_PREFIX + room;
 
-        // Bestehende Nachrichten aus dem localStorage lesen
         let existing = [];
         try { existing = JSON.parse(localStorage.getItem(key) || '[]'); } catch {}
 
-        // Duplikat-Schutz: dieselbe Nachricht nicht zweimal speichern.
-        // Wir vergleichen Text + Zeitstempel (±5 Sekunden Toleranz),
-        // weil created_at vom Server und ts vom Frontend minimal abweichen können.
+        // Duplikat-Schutz: dieselbe Nachricht nicht zweimal speichern
         const isDuplicate = existing.some(e =>
           e.from === m.sender_code &&
           e.text === m.message &&
@@ -1051,6 +1044,7 @@ function startGlobalChatPolling() {
         );
 
         if (!isDuplicate) {
+          // Nachricht in den localStorage-Chat-Raum einsortieren
           existing.push({
             from:     m.sender_code,
             fromName: m.sender_name,
@@ -1058,36 +1052,58 @@ function startGlobalChatPolling() {
             ts:       new Date(m.created_at).getTime()
           });
           localStorage.setItem(key, JSON.stringify(existing));
+
+          // ── NEU: Ungelesen-Zähler erhöhen ──────────────────────────────
+          // Aber nur wenn der Nutzer gerade NICHT mit diesem Absender chattet.
+          // Wenn der Chat-Drawer offen ist und der richtige Partner aktiv ist,
+          // soll keine Benachrichtigung erscheinen – der Nutzer sieht die
+          // Nachricht ja direkt im Chat.
+          const isCurrentChat = (currentDrawer === 'chat' && chatPartnerCode === m.sender_code);
+          if (!isCurrentChat) {
+            unread[m.sender_code] = (unread[m.sender_code] || 0) + 1;
+            hadNewMessages = true;
+          }
         }
       });
 
-      // ── Badge anzeigen ────────────────────────────────────────────────
-      // Wir zeigen die Anzahl der verschiedenen ABSENDER, nicht die Anzahl
-      // der Nachrichten. 3 Nachrichten von 1 Person = Badge "1", nicht "3".
-      // Das fühlt sich natürlicher an – wie bei WhatsApp.
-      const senders = [...new Set(newMsgs.map(m => m.sender_code))];
-      showChatBadge(senders.length);
+      // Zähler einmal am Ende speichern (nicht für jede Nachricht einzeln)
+      if (hadNewMessages) {
+        localStorage.setItem('sm_unread_caching', JSON.stringify(unread));
+        updateChatBadgeFromStorage(); // Badge sofort aktualisieren
+      }
 
-      // ── Wenn Chat-Drawer bereits offen ist: sofort neu rendern ────────
-      // Falls Person B gerade den Chat mit Person A offen hat und Person A
-      // eine neue Nachricht schickt, soll sie sofort erscheinen –
-      // ohne dass Person B warten muss bis der 4-Sekunden-Drawer-Poll feuert.
+      // Wenn Chat-Drawer offen ist: sofort neu rendern
       if (currentDrawer === 'chat' && chatPartnerCode) {
         renderChatMessages();
       }
 
-    } catch {
-      // Netzwerkfehler stillschweigend ignorieren –
-      // der nächste Poll-Versuch kommt in 10 Sekunden automatisch
-    }
+    } catch {}
 
-  }, 10000); // alle 10 Sekunden
+  }, 10000);
 }
-
 
 // ── BADGE ANZEIGEN / VERSTECKEN ───────────────────────────────────────────
 // Zeigt die Anzahl der Absender mit neuen Nachrichten am Chat-Icon an.
 // Bei count=0 wird der Badge ausgeblendet und die Puls-Animation gestoppt.
+
+function updateChatBadgeFromStorage() {
+  try {
+    // sm_unread_caching ist ein Objekt: { "ABCDEF": 2, "XYZ123": 1 }
+    // Der Schlüssel ist der Absender-Code, der Wert ist die Anzahl
+    // ungelesener Nachrichten von diesem Absender.
+    const unread = JSON.parse(localStorage.getItem('sm_unread_caching') || '{}');
+
+    // Wir zählen die Absender mit mindestens einer ungelesenen Nachricht.
+    // 3 Nachrichten von 1 Person = Badge "1", nicht "3".
+    // Das fühlt sich natürlicher an – wie bei WhatsApp.
+    const count = Object.values(unread).filter(n => n > 0).length;
+    showChatBadge(count);
+  } catch {
+    // Im Fehlerfall Badge einfach ausblenden
+    showChatBadge(0);
+  }
+}
+
 
 function showChatBadge(count) {
   const badge  = document.getElementById('chatBadge');
@@ -1266,42 +1282,51 @@ function stopChatPolling() {
 // ── Chat-Drawer öffnen ────────────────────────────────────────────────
 // Das ist der Einstiegspunkt der von openSpotDetail() und
 // loadInvitesIntoDrawer() aufgerufen wird.
+
 function openChatDrawer(partnerCode, partnerName) {
-  chatMyCode      = CODE; // CODE kommt aus dem globalen Scope der index.html
+  chatMyCode      = CODE;
   chatPartnerCode = partnerCode;
   chatPartnerName = partnerName || partnerCode;
   chatRoom        = buildChatRoom(CODE, partnerCode);
   currentDrawer   = 'chat';
 
+  // ── NEU: Ungelesen-Zähler für diesen Partner löschen ───────────────────
+  // Der Nutzer öffnet jetzt den Chat mit diesem Partner – alle Nachrichten
+  // von ihm gelten ab jetzt als "gesehen". Wir löschen seinen Eintrag aus
+  // dem Ungelesen-Objekt und aktualisieren den Badge sofort.
+  // Falls danach noch andere Partner ungelesene Nachrichten haben,
+  // bleibt der Badge für diese weiterhin aktiv.
+  try {
+    const unread = JSON.parse(localStorage.getItem('sm_unread_caching') || '{}');
+    delete unread[partnerCode]; // Nur diesen Partner als "gelesen" markieren
+    localStorage.setItem('sm_unread_caching', JSON.stringify(unread));
+    updateChatBadgeFromStorage(); // Badge sofort neu berechnen
+  } catch {}
+
   document.getElementById('drawerTitle').textContent = '💬 CHAT';
   document.getElementById('drawerOverlay').classList.add('show');
   document.getElementById('drawer').classList.add('open');
 
-  // Drawer-Body mit dem Chat-Layout befüllen
   document.getElementById('drawerBody').innerHTML = `
     <div class="chat-wrap">
-
       <div class="chat-partner-bar">
         💬 ${esc(chatPartnerName)}
         <span style="color:var(--muted);font-weight:400;"> · ${partnerCode}</span>
       </div>
-
       <div class="chat-messages" id="chatMsgs"></div>
-
       <div class="chat-input-row">
         <input class="chat-input" id="chatInput"
                placeholder="Nachricht…" maxlength="280"
                onkeydown="if(event.key==='Enter') sendChatMsg()">
         <button class="chat-send-btn" onclick="sendChatMsg()">➤</button>
       </div>
-
     </div>
   `;
 
-  // Bestehende Nachrichten sofort anzeigen, dann Polling starten
   renderChatMessages();
   startChatPolling();
 }
+
 
 // ── SPOT DETAIL ──────────────────────────────────────────────────────────────
 
