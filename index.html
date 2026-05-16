@@ -1113,7 +1113,7 @@ async function sendInvite() {
   if (!start||!end||isNaN(start)||isNaN(end)) { toast('⚠️ Zeitraum wählen'); return; }
   const spot=allSpots.find(s=>s.id===selectedInviteSpot.id); if(!spot) return;
   closeModals();
-  try { await fetch(`${API}/spotcache/invite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:CODE,to:spot.code,spot.id:spot.id,time_start:start,time_end:end})}); } catch {}
+  try { await fetch(`${API}/spotcache/invite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:CODE,to:spot.code,spot_id:spot.id,time_start:start,time_end:end})}); } catch {}
   toast('✅ Einladung gesendet');
 }
 
