@@ -922,48 +922,93 @@ function closeDrawer() {
 
 // ── INVITES ──────────────────────────────────────────────────────────────────
 async function loadInvitesIntoDrawer(body) {
-  body.innerHTML=`<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
-  let invites=[];
-  try { const r=await fetch(`${API}/spotcache/invites/${CODE}`); if(r.ok) invites=await r.json(); } catch {}
-  document.getElementById('statInvites').textContent=invites.length;
+  body.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+  let invites = [];
+  try {
+    const r = await fetch(`${API}/spotcache/invites/${CODE}`);
+    if (r.ok) invites = await r.json();
+  } catch {}
+
+  document.getElementById('statInvites').textContent = invites.length;
   updateInviteBadge(0);
   document.getElementById('inviteHeaderBtn').classList.remove('active');
-  if (!invites.length) { body.innerHTML=`<div class="empty-state"><div class="es-icon">📨</div>Keine Einladungen.</div>`; return; }
 
-  body.innerHTML=invites.map(inv=>{
-    const isSender=inv.from_code === CODE;
-    const now = Date.now();
-    let statusHtml=inv.status==='pending'?`<span class="status-pill pending">⏳ Ausstehend</span>`:
-      inv.status==='accepted'?(inv.timeStart<=now&&inv.timeEnd>=now?`<span class="status-pill now">🟢 JETZT!</span>`:`<span class="status-pill accepted">✅ Akzeptiert</span>`):'';
-    const cd=inv.timeStart>now?`<span style="font-size:0.65rem;color:var(--muted);">⏰ ${formatCountdown(inv.timeStart)}</span>`:'';
+  if (!invites.length) {
+    body.innerHTML = `<div class="empty-state"><div class="es-icon">📨</div>Keine Einladungen.</div>`;
+    return;
+  }
+
+  body.innerHTML = invites.map(inv => {
+    const isSender = inv.from_code === CODE;
+    const now      = Date.now();
+
+    // ── Feldnamen korrigiert: snake_case wie der Server sie liefert ──────
+    // inv.time_start statt inv.timeStart
+    // inv.time_end   statt inv.timeEnd
+    // inv.spot_id    statt inv.spotId
+    const timeStart = inv.time_start || 0;
+    const timeEnd   = inv.time_end   || 0;
+
+    let statusHtml = inv.status === 'pending'
+      ? `<span class="status-pill pending">⏳ Ausstehend</span>`
+      : inv.status === 'accepted'
+        ? (timeStart <= now && timeEnd >= now
+          ? `<span class="status-pill now">🟢 JETZT!</span>`
+          : `<span class="status-pill accepted">✅ Akzeptiert</span>`)
+        : '';
+
+    const cd = timeStart > now
+      ? `<span style="font-size:0.65rem;color:var(--muted);">⏰ ${formatCountdown(timeStart)}</span>`
+      : '';
+
     return `<div class="spot-card" style="flex-direction:column;align-items:stretch;">
       <div style="display:flex;align-items:center;gap:0.75rem;">
-        <div class="sc-icon">${isSender?'📤':'📨'}</div>
+        <div class="sc-icon">${isSender ? '📤' : '📨'}</div>
         <div class="sc-info">
-          <div class="sc-name">${esc(inv.spotName||'Spot')}</div>
+          <div class="sc-name">${esc(inv.spot_name || 'Spot')}</div>
           <div class="sc-detail">${statusHtml} ${cd}</div>
-          <div class="sc-detail">${formatDateTime(inv.timeStart)} – ${formatDateTime(inv.timeEnd)}</div>
+          <div class="sc-detail">${formatDateTime(timeStart)} – ${formatDateTime(timeEnd)}</div>
         </div>
       </div>
-      ${inv.status==='pending'&&!isSender?`<div style="margin-top:0.75rem;"><button class="sc-btn success" style="width:100%;padding:0.65rem;" data-acc="${inv.id}">✅ Akzeptieren</button></div>`:''}
-      ${inv.status==='accepted'?`<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-        <button class="sc-btn navigate" style="flex:1;padding:0.65rem;" data-nav-spot="${inv.spotId||''}">🧭 Route</button>
-        <button class="sc-btn primary" style="flex:1;padding:0.65rem;" data-ci="${inv.id}">📍 Check-in</button>
-        <button class="sc-btn success" style="padding:0.65rem 0.9rem;" data-chat="${inv.from_code === CODE ? inv.to_code : inv.from_code}" data-chatname="${esc(inv.spot_name || '')}">💬</button>
-      </div>`:''}
+      ${inv.status === 'pending' && !isSender
+        ? `<div style="margin-top:0.75rem;">
+             <button class="sc-btn success" style="width:100%;padding:0.65rem;"
+                     data-acc="${inv.id}">✅ Akzeptieren</button>
+           </div>`
+        : ''}
+      ${inv.status === 'accepted'
+        ? `<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+             <button class="sc-btn navigate" style="flex:1;padding:0.65rem;"
+                     data-nav-spot="${inv.spot_id || ''}">🧭 Route</button>
+             <button class="sc-btn primary" style="flex:1;padding:0.65rem;"
+                     data-ci="${inv.id}">📍 Check-in</button>
+             <button class="sc-btn success" style="padding:0.65rem 0.9rem;"
+                     data-chat="${inv.from_code === CODE ? inv.to_code : inv.from_code}"
+                     data-chatname="${esc(inv.spot_name || '')}">💬</button>
+           </div>`
+        : ''}
     </div>`;
   }).join('');
 
-  body.querySelectorAll('[data-acc]').forEach(b=>b.addEventListener('click',()=>acceptInvite(+b.dataset.acc)));
-  body.querySelectorAll('[data-nav-spot]').forEach(b=>b.addEventListener('click',()=>{
-    const s=allSpots.find(x=>x.id==b.dataset.navSpot); if(s) navigateToSpot(s.lat,s.lng);
-  }));
-  body.querySelectorAll('[data-ci]').forEach(b=>b.addEventListener('click',()=>checkIn(+b.dataset.ci)));
-  // Chat-Button in der Einladungsliste
-  body.querySelectorAll('[data-chat]').forEach(b =>b.addEventListener('click', () => { openChatDrawer(b.dataset.chat, b.dataset.chatname || b.dataset.chat);
-  })
-);
+  body.querySelectorAll('[data-acc]').forEach(b =>
+    b.addEventListener('click', () => acceptInvite(+b.dataset.acc))
+  );
+  body.querySelectorAll('[data-nav-spot]').forEach(b =>
+    b.addEventListener('click', () => {
+      const s = allSpots.find(x => x.id == b.dataset.navSpot);
+      if (s) navigateToSpot(s.lat, s.lng);
+    })
+  );
+  body.querySelectorAll('[data-ci]').forEach(b =>
+    b.addEventListener('click', () => checkIn(+b.dataset.ci))
+  );
+  body.querySelectorAll('[data-chat]').forEach(b =>
+    b.addEventListener('click', () => {
+      openChatDrawer(b.dataset.chat, b.dataset.chatname || b.dataset.chat);
+    })
+  );
 }
+
 
 // ── CHAT-LISTE ────────────────────────────────────────────────────────────────
 // Zeigt alle Gespräche aus dem localStorage – wie eine WhatsApp-Übersicht.
