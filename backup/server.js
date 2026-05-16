@@ -275,7 +275,7 @@ await pool.query(`
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image_status TEXT DEFAULT 'pending'`).catch(() => {});
-    console.log('✅ v4.4 – Alle Spalten bereit (inkl. SpotCache)');
+    console.log('✅ v4.3 – Alle Spalten bereit (inkl. SpotCache)');
   } catch (e) {
     console.log('ℹ️ Spalten existieren bereits oder konnten nicht angelegt werden');
   }
@@ -1164,8 +1164,7 @@ setInterval(() => {
 // Einladung zum Messenger
 
 app.post('/api/invites/send', async (req, res) => {
-  // time_start und time_end aus dem Body lesen – das war vorher vergessen
-  const { from, to, spot_id, time_start, time_end } = req.body;
+  const { from, to, spot_id } = req.body; // spot_id NEU hinzufügen
 
   if (!from || !to || from.length !== 6 || to.length !== 6) {
     return res.status(400).json({ error: 'Ungültige Codes' });
@@ -1174,42 +1173,31 @@ app.post('/api/invites/send', async (req, res) => {
     return res.status(400).json({ error: 'Selbst-Einladung nicht möglich' });
   }
 
-  // ── RAM (wie bisher, aber jetzt MIT Zeitdaten) ──────────────────────────
+  // ── RAM (wie bisher) ──────────────────────────────────────────────────────
+  // Das bleibt komplett gleich – für den lokalen Messenger-Tab
   if (!invites[to]) invites[to] = [];
   const exists = invites[to].find(i => i.from === from);
   if (!exists) {
     const room = [from, to].sort().join('-');
-    invites[to].push({
-      from,
-      to,
-      ts:   Date.now(),
-      room,
-      // NEU: Zeitfenster mitspeichern damit der RAM-Kanal auch die Zeit kennt
-      time_start: time_start || Date.now(),
-      time_end:   time_end   || Date.now() + 7 * 24 * 60 * 60 * 1000
-    });
+    invites[to].push({ from, to, ts: Date.now(), room });
     console.log(`📨 Einladung: ${from} → ${to} (Raum ${room})`);
   }
 
-  // ── Datenbank (nur wenn spot_id vorhanden) ──────────────────────────────
+  // ── Datenbank (NEU) ───────────────────────────────────────────────────────
+  // Nur wenn eine spot_id mitgeschickt wurde (SpotCaching-Kontext)
+  // Normale Messenger-Einladungen ohne Spot bleiben rein RAM-basiert
   if (spot_id) {
     try {
-      // Fallback-Werte falls kein Zeitfenster mitgeschickt wurde –
-      // das kann passieren wenn jemand den Chat-Button ohne Modal nutzt
-      const ts = time_start || Date.now();
-      const te = time_end   || ts + 7 * 24 * 60 * 60 * 1000;
-
+      const now = Date.now();
       await pool.query(
         `INSERT INTO spot_cache_invites
            (from_code, to_code, spot_id, time_start, time_end, status, created_at)
          VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-         ON CONFLICT DO NOTHING`,
-        [from, to, spot_id, ts, te, Date.now()]
-        //                   ↑  ↑
-        // Jetzt kommen die echten Zeitwerte aus dem Frontend-Modal,
-        // nicht mehr der berechnete Standardwert vom Server
+         ON CONFLICT DO NOTHING`, // Keine doppelten Einladungen
+        [from, to, spot_id, now, now + 7 * 24 * 60 * 60 * 1000, now]
       );
     } catch (e) {
+      // Datenbankfehler darf den RAM-Pfad nicht blockieren
       console.error('DB invite error:', e.message);
     }
   }
