@@ -238,45 +238,12 @@
     <input type="text" id="token-display" class="finp" readonly style="font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);">
   </div>
 
-  <div class="sec-label">Backup</div>
-  <div style="font-size:0.78rem;color:var(--muted2);line-height:1.55;padding:0.65rem 0.75rem;background:var(--card);border-radius:10px;border:1px solid var(--bord);margin-bottom:0.75rem;">
-    💡 Sichere deinen Account als Datei. Falls du den Cache leerst oder das Gerät wechselst, kannst du mit dieser Datei alles wiederherstellen – dein Profil, deine Spots und deine Einladungen bleiben auf dem Server erhalten.
-  </div>
-  <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.5rem;">
-
-    <!-- Backup exportieren -->
-    <button onclick="exportBackup()"
-            style="padding:0.8rem;border-radius:12px;border:1px solid rgba(34,211,238,0.3);
-                   background:rgba(34,211,238,0.08);color:var(--cyan);font-size:0.85rem;
-                   font-weight:600;font-family:'Outfit',sans-serif;cursor:pointer;text-align:left;">
-      💾 Backup speichern
-    </button>
-
-    <!-- Backup importieren – löst den versteckten File-Input aus -->
-    <button onclick="document.getElementById('backup-input').click()"
-            style="padding:0.8rem;border-radius:12px;border:1px solid var(--bord2);
-                   background:var(--card);color:var(--muted2);font-size:0.85rem;
-                   font-weight:600;font-family:'Outfit',sans-serif;cursor:pointer;text-align:left;">
-      📥 Backup wiederherstellen
-    </button>
-
-    <!-- Versteckter File-Input – dasselbe Muster wie beim Avatar -->
-    <input type="file" id="backup-input" accept=".json,application/json"
-           style="display:none" onchange="importBackup(this)">
-  </div>
-
   <div class="sec-label">Daten</div>
   <div style="display:flex;flex-direction:column;gap:0.5rem;">
-    <button onclick="exportProfile()"
-            style="padding:0.8rem;border-radius:12px;border:1px solid var(--bord2);
-                   background:var(--card);color:var(--muted2);font-size:0.85rem;
-                   font-weight:600;font-family:'Outfit',sans-serif;cursor:pointer;text-align:left;">
+    <button onclick="exportProfile()" style="padding:0.8rem;border-radius:12px;border:1px solid var(--bord2);background:var(--card);color:var(--muted2);font-size:0.85rem;font-weight:600;font-family:'Outfit',sans-serif;cursor:pointer;text-align:left;">
       📤 Profil exportieren (JSON)
     </button>
-    <button onclick="confirmDeleteProfile()"
-            style="padding:0.8rem;border-radius:12px;border:1px solid rgba(239,68,68,0.3);
-                   background:rgba(239,68,68,0.08);color:var(--red);font-size:0.85rem;
-                   font-weight:600;font-family:'Outfit',sans-serif;cursor:pointer;text-align:left;">
+    <button onclick="confirmDeleteProfile()" style="padding:0.8rem;border-radius:12px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:var(--red);font-size:0.85rem;font-weight:600;font-family:'Outfit',sans-serif;cursor:pointer;text-align:left;">
       🗑️ Profil löschen
     </button>
   </div>
@@ -705,126 +672,6 @@ function exportProfile() {
   a.href = URL.createObjectURL(blob);
   a.download = 'spotme-caching-profil.json';
   a.click();
-}
-
-// ── BACKUP EXPORTIEREN ────────────────────────────────────────────────────────
-// Speichert sm_code + Token + Profil als JSON-Datei auf dem Gerät.
-// Der sm_code ist die Identität des Nutzers, das Token ist der Schlüssel
-// zum Server – zusammen sind sie wie Benutzername + Passwort.
-// Mit dieser Datei kann man sich nach einem Cache-Löschen oder Gerätewechsel
-// vollständig wiederherstellen.
-function exportBackup() {
-  const code  = localStorage.getItem('sm_code');
-  const token = localStorage.getItem('sm_token');
-
-  // Sicherheits-Check: Backup nur sinnvoll wenn Code und Token vorhanden sind
-  if (!code || !token) {
-    toast('⚠️ Kein aktives Profil – erst speichern!');
-    return;
-  }
-
-  const backup = {
-    // Version für spätere Kompatibilitätsprüfungen beim Import
-    version:   1,
-    spot:      SPOT,
-    exported:  new Date().toISOString(),
-
-    // Das Herzstück des Backups – Code + Token = Zugang zum Server
-    sm_code:   code,
-    sm_token:  token,
-    sm_name:   localStorage.getItem('sm_name') || '',
-
-    // Das Profil zusätzlich mitspeichern damit nach dem Restore
-    // sofort alles angezeigt wird ohne auf den Server warten zu müssen
-    profile:   localStorage.getItem(PROFILE_KEY) || '{}'
-  };
-
-  const blob = new Blob(
-    [JSON.stringify(backup, null, 2)],
-    { type: 'application/json' }
-  );
-  const a = document.createElement('a');
-  a.href     = URL.createObjectURL(blob);
-  // Dateiname enthält den Code – so kann man mehrere Backups unterscheiden
-  a.download = `spotme-backup-${code}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-
-  toast('✅ Backup gespeichert');
-}
-
-// ── BACKUP IMPORTIEREN ────────────────────────────────────────────────────────
-// Liest die Backup-Datei, schreibt Code + Token zurück in den localStorage,
-// und gleicht danach mit dem Server ab. Falls das Token noch gültig ist,
-// wird es bestätigt. Falls nicht, erstellt der Server ein neues Token
-// für denselben Code – die Identität bleibt erhalten.
-async function importBackup(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  // File-Input zurücksetzen damit man dieselbe Datei nochmal wählen könnte
-  input.value = '';
-
-  try {
-    const text   = await file.text();
-    const backup = JSON.parse(text);
-
-    // Validierung: Ist das wirklich eine SpotMe-Backup-Datei?
-    if (!backup.sm_code || !backup.sm_token) {
-      toast('⚠️ Ungültige Backup-Datei'); return;
-    }
-    if (backup.sm_code.length !== 6) {
-      toast('⚠️ Code hat falsches Format'); return;
-    }
-    if (backup.spot && backup.spot !== SPOT) {
-      // Das Backup gehört zu einem anderen SpotMe-Bereich (z.B. "gay" statt "caching")
-      toast(`⚠️ Backup gehört zu "${backup.spot}", nicht zu "${SPOT}"`); return;
-    }
-
-    // Sicherheits-Rückfrage wenn bereits ein anderes Profil aktiv ist
-    const existingCode = localStorage.getItem('sm_code');
-    if (existingCode && existingCode !== backup.sm_code) {
-      const ok = confirm(
-        `Achtung: Du hast bereits ein aktives Profil (Code: ${existingCode}).\n\n` +
-        `Wenn du das Backup von Code "${backup.sm_code}" importierst, wird dein ` +
-        `aktuelles Profil lokal überschrieben.\n\nFortfahren?`
-      );
-      if (!ok) return;
-    }
-
-    toast('⏳ Wiederherstelle…');
-
-    // Code + Token + Name in den localStorage schreiben
-    localStorage.setItem('sm_code',  backup.sm_code);
-    localStorage.setItem('sm_token', backup.sm_token);
-    if (backup.sm_name) localStorage.setItem('sm_name', backup.sm_name);
-
-    // Profil-Daten wiederherstellen falls vorhanden
-    if (backup.profile) {
-      try {
-        // Sicherstellen dass es valides JSON ist bevor wir es speichern
-        const p = JSON.parse(backup.profile);
-        localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
-      } catch {}
-    }
-
-    // Mit dem Server abgleichen – das ist der entscheidende Schritt.
-    // saveProfile() schickt das Profil mit dem importierten Token an den Server.
-    // Der Server prüft: Token noch gültig? → bestätigen.
-    // Token abgelaufen? → neues Token für denselben Code vergeben.
-    // So bleibt die Identität (sm_code) immer erhalten.
-    await saveProfile();
-
-    // Profil-Felder neu befüllen damit der Nutzer alles sofort sieht
-    loadProfile();
-    loadAccountInfo();
-
-    toast('✅ Backup erfolgreich wiederhergestellt!');
-
-  } catch (e) {
-    console.error('Import-Fehler:', e);
-    toast('⚠️ Fehler beim Lesen der Datei');
-  }
 }
 
 function confirmDeleteProfile() {
