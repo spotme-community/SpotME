@@ -1231,76 +1231,6 @@ function startGlobalChatPolling() {
   }, 10000);
 }
 
-  // Sicherheit: alten Timer stoppen falls er bereits läuft
-  if (globalChatPollTimer) clearInterval(globalChatPollTimer);
-
-  globalChatPollTimer = setInterval(async () => {
-
-    // Nicht pollen wenn kein gültiger Code vorhanden ist
-    // (z.B. beim ersten Seitenaufruf bevor sich der Nutzer angemeldet hat)
-    if (!CODE || CODE === '000000') return;
-
-    try {
-      const r = await fetch(`${API}/messages/${CODE}?spot_type=caching_chat`);
-      if (!r.ok) return;
-      const newMsgs = await r.json();
-
-      // Keine neuen Nachrichten → nichts zu tun
-      if (!newMsgs.length) return;
-
-      // ── Nachrichten im localStorage speichern ─────────────────────────
-      // Jede Nachricht wird in den richtigen Chat-Raum einsortiert.
-      // buildChatRoom() und CHAT_PREFIX kommen aus dem Chat-Drawer-Block.
-      newMsgs.forEach(m => {
-        const room = buildChatRoom(CODE, m.sender_code);
-        const key  = CHAT_PREFIX + room;
-
-        // Bestehende Nachrichten aus dem localStorage lesen
-        let existing = [];
-        try { existing = JSON.parse(localStorage.getItem(key) || '[]'); } catch {}
-
-        // Duplikat-Schutz: dieselbe Nachricht nicht zweimal speichern.
-        // Wir vergleichen Text + Zeitstempel (±5 Sekunden Toleranz),
-        // weil created_at vom Server und ts vom Frontend minimal abweichen können.
-        const isDuplicate = existing.some(e =>
-          e.from === m.sender_code &&
-          e.text === m.message &&
-          Math.abs(e.ts - new Date(m.created_at).getTime()) < 5000
-        );
-
-        if (!isDuplicate) {
-          existing.push({
-            from:     m.sender_code,
-            fromName: m.sender_name,
-            text:     m.message,
-            ts:       new Date(m.created_at).getTime()
-          });
-          localStorage.setItem(key, JSON.stringify(existing));
-        }
-      });
-
-      // ── Badge anzeigen ────────────────────────────────────────────────
-      // Wir zeigen die Anzahl der verschiedenen ABSENDER, nicht die Anzahl
-      // der Nachrichten. 3 Nachrichten von 1 Person = Badge "1", nicht "3".
-      // Das fühlt sich natürlicher an – wie bei WhatsApp.
-      const senders = [...new Set(newMsgs.map(m => m.sender_code))];
-      showChatBadge(senders.length);
-
-      // ── Wenn Chat-Drawer bereits offen ist: sofort neu rendern ────────
-      // Falls Person B gerade den Chat mit Person A offen hat und Person A
-      // eine neue Nachricht schickt, soll sie sofort erscheinen –
-      // ohne dass Person B warten muss bis der 4-Sekunden-Drawer-Poll feuert.
-      if (currentDrawer === 'chat' && chatPartnerCode) {
-        renderChatMessages();
-      }
-
-    } catch {
-      // Netzwerkfehler stillschweigend ignorieren –
-      // der nächste Poll-Versuch kommt in 10 Sekunden automatisch
-    }
-
-  }, 10000); // alle 10 Sekunden
-}
 
 
 // ── BADGE ANZEIGEN / VERSTECKEN ───────────────────────────────────────────
@@ -1544,42 +1474,6 @@ function openChatDrawer(partnerCode, partnerName) {
     </div>
   `;
 
-  renderChatMessages();
-  startChatPolling();
-}
-
-  chatMyCode      = CODE; // CODE kommt aus dem globalen Scope der index.html
-  chatPartnerCode = partnerCode;
-  chatPartnerName = partnerName || partnerCode;
-  chatRoom        = buildChatRoom(CODE, partnerCode);
-  currentDrawer   = 'chat';
-
-  document.getElementById('drawerTitle').textContent = '💬 CHAT';
-  document.getElementById('drawerOverlay').classList.add('show');
-  document.getElementById('drawer').classList.add('open');
-
-  // Drawer-Body mit dem Chat-Layout befüllen
-  document.getElementById('drawerBody').innerHTML = `
-    <div class="chat-wrap">
-
-      <div class="chat-partner-bar">
-        💬 ${esc(chatPartnerName)}
-        <span style="color:var(--muted);font-weight:400;"> · ${partnerCode}</span>
-      </div>
-
-      <div class="chat-messages" id="chatMsgs"></div>
-
-      <div class="chat-input-row">
-        <input class="chat-input" id="chatInput"
-               placeholder="Nachricht…" maxlength="280"
-               onkeydown="if(event.key==='Enter') sendChatMsg()">
-        <button class="chat-send-btn" onclick="sendChatMsg()">➤</button>
-      </div>
-
-    </div>
-  `;
-
-  // Bestehende Nachrichten sofort anzeigen, dann Polling starten
   renderChatMessages();
   startChatPolling();
 }
