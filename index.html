@@ -330,7 +330,7 @@
   <div class="topbar">
   <div class="logo">
     <div class="logo-dot"></div>
-    SPOT<span style="color:var(--text);font-weight:400;">ME3</span>
+    SPOT<span style="color:var(--text);font-weight:400;">ME2</span>
     <span class="logo-sub">Caching V1</span>
   </div>
   <button class="icon-btn" onclick="location.href='profil-caching.html'">👤</button>
@@ -1159,36 +1159,9 @@ async function sendInvite() {
   const end=new Date(document.getElementById('inviteEnd').value).getTime();
   if (!start||!end||isNaN(start)||isNaN(end)) { toast('⚠️ Zeitraum wählen'); return; }
   const spot=allSpots.find(s=>s.id===selectedInviteSpot.id); if(!spot) return;
-  
-  // Test
-closeModals();
-try {
-  const res = await fetch(`${API}/spotcache/invite`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from:       CODE,
-      to:         spot.code,
-      spot_id:    spot.id,
-      time_start: start,
-      time_end:   end
-    })
-  });
-
-  // Serverantwort in die Konsole schreiben – so sehen wir ob wirklich
-  // alles geklappt hat oder ob der Server einen Fehler zurückgegeben hat
-  const data = await res.json();
-  console.log('Einladung Response:', res.status, JSON.stringify(data));
-
-  if (res.ok) {
-    toast('✅ Einladung gesendet');
-  } else {
-    // Fehler sichtbar machen statt still zu ignorieren
-    toast('⚠️ Fehler: ' + (data.error || res.status));
-  }
-} catch (e) {
-  console.log('Netzwerkfehler:', e.message);
-  toast('⚠️ Server nicht erreichbar');
+  closeModals();
+  try { await fetch(`${API}/spotcache/invite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:CODE,to:spot.code,spot_id:spot.id,time_start:start,time_end:end})}); } catch {}
+  toast('✅ Einladung gesendet');
 }
 
 async function acceptInvite(id) {
