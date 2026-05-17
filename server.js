@@ -1626,8 +1626,15 @@ app.get('/api/userspots/common/:code1/:code2', async (req, res) => {
 });
 
 // 📨 Treffpunkt-Einladung senden
+
 app.post('/api/spotcache/invite', async (req, res) => {
-  const { from, to, spotId, timeStart, timeEnd } = req.body;
+  const { from, to } = req.body;
+
+  // Beide Schreibweisen akzeptieren – camelCase und snake_case
+  const spotId    = req.body.spot_id    || req.body.spotId;
+  const timeStart = req.body.time_start || req.body.timeStart;
+  const timeEnd   = req.body.time_end   || req.body.timeEnd;
+
   if (!from || !to || !spotId || !timeStart || !timeEnd) {
     return res.status(400).json({ error: 'Fehlende Felder' });
   }
