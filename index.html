@@ -1155,18 +1155,67 @@ function openInviteFromSpot(spotId, name, wish) {
 
 async function sendInvite() {
   if (!selectedInviteSpot) return;
-  const start=new Date(document.getElementById('inviteStart').value).getTime();
-  const end=new Date(document.getElementById('inviteEnd').value).getTime();
-  if (!start||!end||isNaN(start)||isNaN(end)) { toast('⚠️ Zeitraum wählen'); return; }
-  const spot=allSpots.find(s=>s.id===selectedInviteSpot.id); if(!spot) return;
+
+  const start = new Date(document.getElementById('inviteStart').value).getTime();
+  const end   = new Date(document.getElementById('inviteEnd').value).getTime();
+
+  if (!start || !end || isNaN(start) || isNaN(end)) {
+    toast('⚠️ Zeitraum wählen'); return;
+  }
+
+  const spot = allSpots.find(s => s.id === selectedInviteSpot.id);
+  if (!spot) return;
+
   closeModals();
-  try { await fetch(`${API}/spotcache/invite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:CODE,to:spot.code,spot_id:spot.id,time_start:start,time_end:end})}); } catch {}
-  toast('✅ Einladung gesendet');
+
+  try {
+    const res = await fetch(`${API}/spotcache/invite`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        from:       CODE,
+        to:         spot.code,
+        spot_id:    spot.id,
+        time_start: start,
+        time_end:   end
+      })
+    });
+
+    const data = await res.json();
+    console.log('sendInvite Response:', res.status, JSON.stringify(data));
+
+    if (res.ok) {
+      toast('✅ Einladung gesendet');
+    } else {
+      toast('⚠️ Fehler: ' + (data.error || res.status));
+    }
+  } catch (e) {
+    console.log('sendInvite Netzwerkfehler:', e.message);
+    toast('⚠️ Server nicht erreichbar');
+  }
 }
 
 async function acceptInvite(id) {
-  try { await fetch(`${API}/spotcache/invite/respond`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,code:CODE,action:'accept'})}); } catch {}
-  toast('✅ Akzeptiert');
+  try {
+    const res = await fetch(`${API}/spotcache/invite/respond`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id, code: CODE, action: 'accept' })
+    });
+
+    const data = await res.json();
+    console.log('acceptInvite Response:', res.status, JSON.stringify(data));
+
+    if (res.ok) {
+      toast('✅ Akzeptiert');
+    } else {
+      toast('⚠️ Fehler: ' + (data.error || res.status));
+    }
+  } catch (e) {
+    console.log('acceptInvite Netzwerkfehler:', e.message);
+    toast('⚠️ Server nicht erreichbar');
+  }
+
   loadInvitesIntoDrawer(document.getElementById('drawerBody'));
 }
 
