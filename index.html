@@ -932,8 +932,6 @@ async function loadInvitesIntoDrawer(body) {
     const r = await fetch(`${API}/spotcache/invites/${CODE}`);
     if (r.ok) invites = await r.json();
   } catch {}
-  
-  console.log('Einladungen vom Server:', JSON.stringify(invites[0], null, 2));
 
   document.getElementById('statInvites').textContent = invites.length;
   updateInviteBadge(0);
@@ -944,14 +942,25 @@ async function loadInvitesIntoDrawer(body) {
     return;
   }
 
-  body.innerHTML = invites.map(inv => {
-    const isSender = inv.from_code === CODE;
-    const now      = Date.now();
+  const now = Date.now();
 
-    // ── Feldnamen korrigiert: snake_case wie der Server sie liefert ──────
-    // inv.time_start statt inv.timeStart
-    // inv.time_end   statt inv.timeEnd
-    // inv.spot_id    statt inv.spotId
+  // Einladungen in zwei Gruppen aufteilen.
+  // Aktiv = Status ist noch pending/accepted UND Zeitfenster liegt in der Zukunft.
+  // Abgelaufen = entweder vom Server als 'expired' markiert, ODER time_end
+  // liegt bereits in der Vergangenheit (der Server-Cleanup läuft erst täglich,
+  // das Frontend erkennt es also sofort).
+  const active  = invites.filter(inv =>
+    inv.status !== 'expired' && (inv.time_end || 0) >= now
+  );
+  const expired = invites.filter(inv =>
+    inv.status === 'expired' || (inv.time_end || 0) < now
+  );
+
+  // ── Hilfsfunktion: eine einzelne Einladungskarte rendern ─────────────────
+  // isExpired steuert die visuelle Darstellung (reduzierte Opacity)
+  // und blendet Aktions-Buttons aus die keinen Sinn mehr machen
+  const renderInvite = (inv, isExpired = false) => {
+    const isSender  = inv.from_code === CODE;
     const timeStart = inv.time_start || 0;
     const timeEnd   = inv.time_end   || 0;
 
@@ -961,41 +970,89 @@ async function loadInvitesIntoDrawer(body) {
         ? (timeStart <= now && timeEnd >= now
           ? `<span class="status-pill now">🟢 JETZT!</span>`
           : `<span class="status-pill accepted">✅ Akzeptiert</span>`)
-        : '';
+        : inv.status === 'expired'
+          ? `<span class="status-pill"
+                   style="background:rgba(100,116,139,0.2);
+                          color:#64748b;
+                          border-color:rgba(100,116,139,0.3);">
+               📁 Abgelaufen</span>`
+          : '';
 
     const cd = timeStart > now
-      ? `<span style="font-size:0.65rem;color:var(--muted);">⏰ ${formatCountdown(timeStart)}</span>`
+      ? `<span style="font-size:0.65rem;color:var(--muted);">
+           ⏰ ${formatCountdown(timeStart)}</span>`
       : '';
 
-    return `<div class="spot-card" style="flex-direction:column;align-items:stretch;">
-      <div style="display:flex;align-items:center;gap:0.75rem;">
-        <div class="sc-icon">${isSender ? '📤' : '📨'}</div>
-        <div class="sc-info">
-          <div class="sc-name">${esc(inv.spot_name || 'Spot')}</div>
-          <div class="sc-detail">${statusHtml} ${cd}</div>
-          <div class="sc-detail">${formatDateTime(timeStart)} – ${formatDateTime(timeEnd)}</div>
-        </div>
-      </div>
-      ${inv.status === 'pending' && !isSender
-        ? `<div style="margin-top:0.75rem;">
-             <button class="sc-btn success" style="width:100%;padding:0.65rem;"
-                     data-acc="${inv.id}">✅ Akzeptieren</button>
-           </div>`
-        : ''}
-      ${inv.status === 'accepted'
-        ? `<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
-             <button class="sc-btn navigate" style="flex:1;padding:0.65rem;"
-                     data-nav-spot="${inv.spot_id || ''}">🧭 Route</button>
-             <button class="sc-btn primary" style="flex:1;padding:0.65rem;"
-                     data-ci="${inv.id}">📍 Check-in</button>
-             <button class="sc-btn success" style="padding:0.65rem 0.9rem;"
-                     data-chat="${inv.from_code === CODE ? inv.to_code : inv.from_code}"
-                     data-chatname="${esc(inv.spot_name || '')}">💬</button>
-           </div>`
-        : ''}
-    </div>`;
-  }).join('');
+    // Abgelaufene Karten werden mit reduzierter Opacity dargestellt –
+    // der Nutzer sieht sie noch, aber sie treten optisch in den Hintergrund
+    const cardStyle = isExpired
+      ? 'flex-direction:column;align-items:stretch;opacity:0.5;'
+      : 'flex-direction:column;align-items:stretch;';
 
+    return `
+      <div class="spot-card" style="${cardStyle}">
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <div class="sc-icon">${isSender ? '📤' : '📨'}</div>
+          <div class="sc-info">
+            <div class="sc-name">${esc(inv.spot_name || 'Spot')}</div>
+            <div class="sc-detail">${statusHtml} ${cd}</div>
+            <div class="sc-detail">
+              ${formatDateTime(timeStart)} – ${formatDateTime(timeEnd)}
+            </div>
+          </div>
+        </div>
+
+        ${inv.status === 'pending' && !isSender && !isExpired
+          ? `<div style="margin-top:0.75rem;">
+               <button class="sc-btn success" style="width:100%;padding:0.65rem;"
+                       data-acc="${inv.id}">✅ Akzeptieren</button>
+             </div>`
+          : ''}
+
+        ${inv.status === 'accepted' && !isExpired
+          ? `<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+               <button class="sc-btn navigate" style="flex:1;padding:0.65rem;"
+                       data-nav-spot="${inv.spot_id || ''}">🧭 Route</button>
+               <button class="sc-btn primary" style="flex:1;padding:0.65rem;"
+                       data-ci="${inv.id}">📍 Check-in</button>
+               <button class="sc-btn success" style="padding:0.65rem 0.9rem;"
+                       data-chat="${inv.from_code === CODE ? inv.to_code : inv.from_code}"
+                       data-chatname="${esc(inv.spot_name || '')}">💬</button>
+             </div>`
+          : ''}
+      </div>`;
+  };
+
+  // ── HTML zusammenbauen ───────────────────────────────────────────────────
+  let html = '';
+
+  if (active.length) {
+    html += active.map(inv => renderInvite(inv, false)).join('');
+  } else {
+    html += `<div class="empty-state" style="padding:1rem 0;">
+      <div class="es-icon">📭</div>Keine aktiven Einladungen.</div>`;
+  }
+
+  // Abgelaufene Einladungen in einem <details>-Block – pures HTML,
+  // kein JavaScript nötig für das Aufklappen. Der Browser erledigt das selbst.
+  if (expired.length) {
+    html += `
+      <details style="margin-top:1rem;">
+        <summary style="cursor:pointer;font-size:0.75rem;color:var(--muted);
+                        font-family:'Space Mono',monospace;padding:0.5rem 0;
+                        list-style:none;display:flex;align-items:center;gap:0.5rem;">
+          📁 Vergangene Treffen (${expired.length})
+          <span style="font-size:0.6rem;opacity:0.6;">▼ tippen zum öffnen</span>
+        </summary>
+        <div style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.5rem;">
+          ${expired.map(inv => renderInvite(inv, true)).join('')}
+        </div>
+      </details>`;
+  }
+
+  body.innerHTML = html;
+
+  // ── Event-Listener ───────────────────────────────────────────────────────
   body.querySelectorAll('[data-acc]').forEach(b =>
     b.addEventListener('click', () => acceptInvite(+b.dataset.acc))
   );
@@ -1182,7 +1239,6 @@ async function sendInvite() {
     });
 
     const data = await res.json();
-    console.log('sendInvite Response:', res.status, JSON.stringify(data));
 
     if (res.ok) {
       toast('✅ Einladung gesendet');
@@ -1190,7 +1246,6 @@ async function sendInvite() {
       toast('⚠️ Fehler: ' + (data.error || res.status));
     }
   } catch (e) {
-    console.log('sendInvite Netzwerkfehler:', e.message);
     toast('⚠️ Server nicht erreichbar');
   }
 }
@@ -1204,7 +1259,6 @@ async function acceptInvite(id) {
     });
 
     const data = await res.json();
-    console.log('acceptInvite Response:', res.status, JSON.stringify(data));
 
     if (res.ok) {
       toast('✅ Akzeptiert');
@@ -1212,7 +1266,6 @@ async function acceptInvite(id) {
       toast('⚠️ Fehler: ' + (data.error || res.status));
     }
   } catch (e) {
-    console.log('acceptInvite Netzwerkfehler:', e.message);
     toast('⚠️ Server nicht erreichbar');
   }
 

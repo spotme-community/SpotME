@@ -2,9 +2,9 @@
 <html lang="de">
 <head>
 
-<!-- Eruda – Mobile Console (nur für Debugging) -->
+<!-- Eruda – Mobile Console (nur für Debugging)
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
+  <script>eruda.init();</script> -->
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
@@ -58,7 +58,7 @@
   z-index: 100;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   padding: 0.75rem 1rem;
   padding-top: max(0.75rem, env(safe-area-inset-top));
   background: linear-gradient(to bottom, rgba(10,13,18,0.95) 0%, transparent 100%);
@@ -71,7 +71,7 @@
     @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
     .logo-sub { font-family:'Outfit',sans-serif; font-weight:300; font-size:0.7rem; color:var(--muted); letter-spacing:0.15em; }
 
-    .icon-btn { width:38px; height:38px; border-radius:10px; border:1px solid var(--bord2); background:var(--glass); backdrop-filter:blur(16px); color:var(--muted2); font-size:1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; position:relative; }
+    .icon-btn { width:45px; height:45px; border-radius:11px; border:1px solid var(--bord2); background:var(--glass); backdrop-filter:blur(16px); color:var(--muted2); font-size:1.4rem; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; position:relative; }
     .icon-btn:active, .icon-btn.active { background:var(--acc-dim); border-color:var(--acc-glow); color:var(--acc); }
     .badge { position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; border-radius:8px; background:var(--red); color:#fff; font-size:0.6rem; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 3px; border:2px solid var(--bg); }
 
@@ -330,7 +330,7 @@
   <div class="topbar">
   <div class="logo">
     <div class="logo-dot"></div>
-    SPOT<span style="color:var(--text);font-weight:400;">ME2</span>
+    SPOT<span style="color:var(--text);font-weight:300;">ME</span>
     <span class="logo-sub">Caching V1</span>
   </div>
   <button class="icon-btn" onclick="location.href='profil-caching.html'">👤</button>
@@ -1155,18 +1155,67 @@ function openInviteFromSpot(spotId, name, wish) {
 
 async function sendInvite() {
   if (!selectedInviteSpot) return;
-  const start=new Date(document.getElementById('inviteStart').value).getTime();
-  const end=new Date(document.getElementById('inviteEnd').value).getTime();
-  if (!start||!end||isNaN(start)||isNaN(end)) { toast('⚠️ Zeitraum wählen'); return; }
-  const spot=allSpots.find(s=>s.id===selectedInviteSpot.id); if(!spot) return;
+
+  const start = new Date(document.getElementById('inviteStart').value).getTime();
+  const end   = new Date(document.getElementById('inviteEnd').value).getTime();
+
+  if (!start || !end || isNaN(start) || isNaN(end)) {
+    toast('⚠️ Zeitraum wählen'); return;
+  }
+
+  const spot = allSpots.find(s => s.id === selectedInviteSpot.id);
+  if (!spot) return;
+
   closeModals();
-  try { await fetch(`${API}/spotcache/invite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:CODE,to:spot.code,spot_id:spot.id,time_start:start,time_end:end})}); } catch {}
-  toast('✅ Einladung gesendet');
+
+  try {
+    const res = await fetch(`${API}/spotcache/invite`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        from:       CODE,
+        to:         spot.code,
+        spot_id:    spot.id,
+        time_start: start,
+        time_end:   end
+      })
+    });
+
+    const data = await res.json();
+    console.log('sendInvite Response:', res.status, JSON.stringify(data));
+
+    if (res.ok) {
+      toast('✅ Einladung gesendet');
+    } else {
+      toast('⚠️ Fehler: ' + (data.error || res.status));
+    }
+  } catch (e) {
+    console.log('sendInvite Netzwerkfehler:', e.message);
+    toast('⚠️ Server nicht erreichbar');
+  }
 }
 
 async function acceptInvite(id) {
-  try { await fetch(`${API}/spotcache/invite/respond`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,code:CODE,action:'accept'})}); } catch {}
-  toast('✅ Akzeptiert');
+  try {
+    const res = await fetch(`${API}/spotcache/invite/respond`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ id, code: CODE, action: 'accept' })
+    });
+
+    const data = await res.json();
+    console.log('acceptInvite Response:', res.status, JSON.stringify(data));
+
+    if (res.ok) {
+      toast('✅ Akzeptiert');
+    } else {
+      toast('⚠️ Fehler: ' + (data.error || res.status));
+    }
+  } catch (e) {
+    console.log('acceptInvite Netzwerkfehler:', e.message);
+    toast('⚠️ Server nicht erreichbar');
+  }
+
   loadInvitesIntoDrawer(document.getElementById('drawerBody'));
 }
 

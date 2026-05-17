@@ -286,34 +286,100 @@ await pool.query(`
 // ---------- Standort-Cache (RAM, 2-Min TTL) ----------
 const locationCache = new Map();
 
-// ---------- Cleanup (alle 2 Minuten) ----------
+// Zähler der verfolgt wie oft der Interval bereits gefeuert hat.
+// Damit können wir seltene Aufgaben (z.B. täglich) von häufigen
+// (z.B. alle 2 Minuten) trennen – ohne zwei separate setInterval-Timer.
+let cleanupTickCount = 0;
+
 setInterval(async () => {
   const now = Date.now();
+  cleanupTickCount++;
 
+  // ── ALLE 2 MINUTEN: RAM-Cache bereinigen ────────────────────────────────
+  // Der locationCache wächst mit jedem Online-Nutzer – ohne Cleanup würde
+  // er über Zeit den Arbeitsspeicher des Servers füllen.
   for (const [key, data] of locationCache.entries()) {
     if (now - data.ts > 120000) locationCache.delete(key);
   }
 
-  try {
-    const r = await pool.query(`DELETE FROM missed_calls WHERE created_at < NOW() - INTERVAL '7 days'`);
-    if (r.rowCount > 0) console.log(`🧹 ${r.rowCount} alte Missed Calls gelöscht`);
-  } catch (e) { console.error('Cleanup missed_calls:', e.message); }
+  // ── ALLE 2 MINUTEN: Einladungen im RAM bereinigen ───────────────────────
+  // Einladungen älter als 2 Stunden aus dem RAM löschen (bereits vorhanden)
+  for (const code of Object.keys(invites)) {
+    invites[code] = invites[code].filter(i => now - i.ts < 2 * 60 * 60 * 1000);
+    if (invites[code].length === 0) delete invites[code];
+  }
 
-  try {
-    const r = await pool.query(`DELETE FROM offline_messages WHERE created_at < NOW() - INTERVAL '7 days'`);
-    if (r.rowCount > 0) console.log(`🧹 ${r.rowCount} alte Offline-Nachrichten gelöscht`);
-  } catch (e) { console.error('Cleanup offline_messages:', e.message); }
+  // ── ALLE 7 TAGE (= 5040 Ticks × 2 Min): Datenbank-Cleanup ──────────────
+  // Wir führen schwere Datenbankoperationen nicht alle 2 Minuten aus,
+  // sondern nur täglich. 720 Ticks × 2 Minuten = genau 24 Stunden.
+  // Der Modulo-Operator % gibt den Rest einer Division zurück:
+  // cleanupTickCount % 720 === 0 ist nur dann true wenn der Zähler
+  // ein genaues Vielfaches von 720 ist – also genau alle 24 Stunden.
+  const isDaily = cleanupTickCount % 720 === 0;
 
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-  try {
-    const r = await pool.query(
-      `DELETE FROM profiles WHERE visible_until < $1 AND COALESCE(last_seen, updated_at) < $2`,
-      [now, thirtyDaysAgo]
-    );
-    if (r.rowCount > 0) console.log(`🧹 ${r.rowCount} inaktive Profile gelöscht`);
-  } catch (e) { console.error('Cleanup profiles:', e.message); }
+  if (isDaily) {
+    console.log('🗓️ Täglicher Datenbank-Cleanup startet…');
 
-}, 120000);
+    // ── Abgelaufene Einladungen auf 'expired' setzen ──────────────────────
+    // Wir löschen sie NICHT sofort – der Nutzer soll seine vergangenen
+    // Treffen noch bis zu 30 Tage sehen können (Strategie 2).
+    try {
+      const r = await pool.query(
+        `UPDATE spot_cache_invites
+         SET status = 'expired'
+         WHERE time_end < $1
+           AND status IN ('pending', 'accepted')`,
+        [now]
+      );
+      if (r.rowCount > 0) console.log(`🗂️ ${r.rowCount} Einladungen auf 'expired' gesetzt`);
+    } catch (e) { console.error('Cleanup invites (expire):', e.message); }
+
+    // ── Wirklich alte Einladungen endgültig löschen (>30 Tage) ───────────
+    // Erst nach 30 Tagen werden die archivierten Einladungen wirklich
+    // aus der Datenbank entfernt. Das hält die Tabelle langfristig klein.
+    try {
+      const cutoff = now - (30 * 24 * 60 * 60 * 1000);
+      const r = await pool.query(
+        `DELETE FROM spot_cache_invites
+         WHERE status = 'expired'
+           AND time_end < $1`,
+        [cutoff]
+      );
+      if (r.rowCount > 0) console.log(`🗑️ ${r.rowCount} alte Einladungen gelöscht (>30 Tage)`);
+    } catch (e) { console.error('Cleanup invites (delete):', e.message); }
+
+    // ── Alte Missed Calls löschen ─────────────────────────────────────────
+    try {
+      const r = await pool.query(
+        `DELETE FROM missed_calls WHERE created_at < NOW() - INTERVAL '7 days'`
+      );
+      if (r.rowCount > 0) console.log(`🧹 ${r.rowCount} alte Missed Calls gelöscht`);
+    } catch (e) { console.error('Cleanup missed_calls:', e.message); }
+
+    // ── Alte Offline-Nachrichten löschen ──────────────────────────────────
+    try {
+      const r = await pool.query(
+        `DELETE FROM offline_messages WHERE created_at < NOW() - INTERVAL '7 days'`
+      );
+      if (r.rowCount > 0) console.log(`🧹 ${r.rowCount} alte Offline-Nachrichten gelöscht`);
+    } catch (e) { console.error('Cleanup offline_messages:', e.message); }
+
+    // ── Inaktive Profile löschen ──────────────────────────────────────────
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    try {
+      const r = await pool.query(
+        `DELETE FROM profiles
+         WHERE visible_until < $1
+           AND COALESCE(last_seen, updated_at) < $2`,
+        [now, thirtyDaysAgo]
+      );
+      if (r.rowCount > 0) console.log(`🧹 ${r.rowCount} inaktive Profile gelöscht`);
+    } catch (e) { console.error('Cleanup profiles:', e.message); }
+
+    console.log('✅ Täglicher Cleanup abgeschlossen');
+  }
+
+}, 120000); // alle 2 Minuten
 
 // ---------- Antispam ----------
 function sanitizeMessage(text) {
