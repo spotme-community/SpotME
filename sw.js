@@ -4,8 +4,8 @@
 // Versionierung: CACHE_VERSION bei jedem Deploy hochzählen.
 // Der Browser erkennt den neuen SW, löscht den alten Cache
 // und installiert die neuen Dateien automatisch.
-// ═══════════════════════════════════════════════════════════════
-const CACHE_VERSION = 'v12.4';
+// ══════════════════════════════════════════════════════════════
+const CACHE_VERSION = 'v12.5';
 const CACHE_STATIC  = `spotme-caching-${CACHE_VERSION}`;
 const CACHE_API     = `spotme-api-${CACHE_VERSION}`;
 
@@ -16,6 +16,7 @@ const STATIC_ASSETS = [
   '/index.html',
   '/spot-caching.html',
   '/profil-caching.html',
+  '/spot-caching.html',
   '/404.html',
   '/manifest.json'
 ];
