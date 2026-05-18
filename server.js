@@ -1747,12 +1747,10 @@ app.get('/api/userspots/common/:code1/:code2', async (req, res) => {
   }
 });
 
-// 📨 Treffpunkt-Einladung senden
 
+// 📨 Treffpunkt-Einladung senden
 app.post('/api/spotcache/invite', async (req, res) => {
   const { from, to } = req.body;
-
-  // Beide Schreibweisen akzeptieren – camelCase und snake_case
   const spotId    = req.body.spot_id    || req.body.spotId;
   const timeStart = req.body.time_start || req.body.timeStart;
   const timeEnd   = req.body.time_end   || req.body.timeEnd;
@@ -1760,18 +1758,32 @@ app.post('/api/spotcache/invite', async (req, res) => {
   if (!from || !to || !spotId || !timeStart || !timeEnd) {
     return res.status(400).json({ error: 'Fehlende Felder' });
   }
+
   try {
+    // 1. Abgelaufene, akzeptierte Einladungen auf 'expired' setzen
+    await pool.query(
+      `UPDATE spot_cache_invites
+       SET status = 'expired'
+       WHERE from_code = $1 AND to_code = $2 AND spot_id = $3
+         AND status = 'accepted'
+         AND time_end < $4`,
+      [from, to, spotId, Date.now()]
+    );
+
+    // 2. Neue Einladung einfügen
     await pool.query(
       `INSERT INTO spot_cache_invites (from_code, to_code, spot_id, time_start, time_end, status, created_at)
        VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
       [from, to, spotId, timeStart, timeEnd, Date.now()]
     );
+
     res.json({ success: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Fehler beim Einladen' });
   }
 });
+
 
 // 📨 Einladungen abrufen (für mich)
 app.get('/api/spotcache/invites/:code', async (req, res) => {
