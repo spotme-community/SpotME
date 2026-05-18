@@ -865,19 +865,84 @@ function openDrawer(type) {
     loadChatListIntoDrawer(body);
 
   } else if (type === 'myspots') {
-    title.textContent='MEINE SPOTS';
-    body.innerHTML=mySpots.length
-      ? mySpots.map(s=>`<div class="spot-card">
-          <div class="sc-icon">🟠</div>
-          <div class="sc-info"><div class="sc-name">${esc(s.name)}</div>
-          <div class="sc-detail"><span class="sc-tag">${s.wishTag||''}</span>${spotAgeHtml(s.createdAt||s.created_at)}</div></div>
-          <div class="sc-actions">
-            <button class="sc-btn navigate" data-lat="${s.lat}" data-lng="${s.lng}">🧭</button>
-            <button class="sc-btn danger" data-del="${s.id}">🗑️</button>
-          </div></div>`).join('')
+    title.textContent = 'MEINE SPOTS';
+    body.innerHTML = mySpots.length
+      ? mySpots.map(s => {
+          // active kann true, false, oder undefined sein (für ältere Spots ohne die Spalte)
+          // Wir behandeln undefined wie true – bestehende Spots bleiben sichtbar
+          const isActive = s.active !== false;
+          return `<div class="spot-card" style="opacity:${isActive ? '1' : '0.55'};">
+            <div class="sc-icon">
+              <!-- Spot-Icon zeigt den Status: orange=aktiv, grau=pausiert -->
+              <span style="color:${isActive ? 'var(--acc)' : 'var(--muted)'};">🟠</span>
+            </div>
+            <div class="sc-info">
+              <div class="sc-name">${esc(s.name)}</div>
+              <div class="sc-detail">
+                <span class="sc-tag">${s.wishTag || ''}</span>
+                ${spotAgeHtml(s.createdAt || s.created_at)}
+                <!-- Status-Pill zeigt dem Nutzer sofort ob der Spot sichtbar ist -->
+                <span style="font-size:0.62rem;font-weight:600;
+                             color:${isActive ? '#10b981' : 'var(--muted)'};
+                             font-family:'Space Mono',monospace;">
+                  ${isActive ? '● Aktiv' : '○ Pausiert'}
+                </span>
+              </div>
+            </div>
+            <div class="sc-actions">
+              <button class="sc-btn navigate" data-lat="${s.lat}" data-lng="${s.lng}">🧭</button>
+              <!-- Toggle-Button: wechselt zwischen Aktivieren und Pausieren -->
+              <button class="sc-btn" data-toggle="${s.id}"
+                      style="background:${isActive
+                        ? 'rgba(245,158,11,0.12)'
+                        : 'rgba(16,185,129,0.12)'};
+                             border-color:${isActive
+                        ? 'rgba(245,158,11,0.35)'
+                        : 'rgba(16,185,129,0.35)'};
+                             color:${isActive ? 'var(--acc)' : '#10b981'};"
+                      title="${isActive ? 'Spot pausieren' : 'Spot aktivieren'}">
+                ${isActive ? '⏸' : '▶'}
+              </button>
+              <button class="sc-btn danger" data-del="${s.id}">🗑️</button>
+            </div>
+          </div>`;
+        }).join('')
       : `<div class="empty-state"><div class="es-icon">🗺️</div>Noch keine Spots.</div>`;
-    body.querySelectorAll('[data-lat]').forEach(b=>b.addEventListener('click',()=>navigateToSpot(+b.dataset.lat,+b.dataset.lng)));
-    body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{deleteSpot(+b.dataset.del);closeDrawer();}));
+
+    body.querySelectorAll('[data-lat]').forEach(b =>
+      b.addEventListener('click', () => navigateToSpot(+b.dataset.lat, +b.dataset.lng))
+    );
+
+    // Toggle-Button: Spot aktivieren oder pausieren
+    body.querySelectorAll('[data-toggle]').forEach(b =>
+      b.addEventListener('click', async () => {
+        const token = localStorage.getItem('sm_token');
+        try {
+          const res = await fetch(`${API}/userspots/${b.dataset.toggle}/toggle`, {
+            method:  'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ code: CODE, token })
+          });
+          const data = await res.json();
+          if (data.success) {
+            // Spot-Array lokal aktualisieren damit kein neuer Server-Aufruf nötig ist
+            const spot = mySpots.find(s => s.id == b.dataset.toggle);
+            if (spot) spot.active = data.active;
+            // Drawer sofort neu rendern – der Nutzer sieht die Änderung sofort
+            openDrawer('myspots');
+            toast(data.active ? '▶ Spot aktiviert' : '⏸ Spot pausiert');
+            // Karte aktualisieren damit der Spot dort auch sofort erscheint/verschwindet
+            await loadAllSpots();
+          }
+        } catch (e) {
+          toast('⚠️ Fehler beim Umschalten');
+        }
+      })
+    );
+
+    body.querySelectorAll('[data-del]').forEach(b =>
+      b.addEventListener('click', () => { deleteSpot(+b.dataset.del); closeDrawer(); })
+    );
 
   } else if (type === 'all') {
     title.textContent='ALLE SPOTS';
