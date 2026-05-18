@@ -1825,18 +1825,20 @@ async function openSpotDetail(spotId) {
     openChatDrawer(spot.code, profile?.name || spot.code);
   };
 
-  // Prüfen ob bereits eine akzeptierte Einladung existiert
-  let existingInvite = null;
-  try {
-    const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
-    if (ir.ok) {
-      const allInvites = await ir.json();
-      existingInvite = allInvites.find(inv =>
-        (inv.from_code === spot.code || inv.to_code === spot.code) &&
-        inv.status === 'accepted'
-      );
-    }
-  } catch {}
+// Prüfen ob bereits eine AKTIVE akzeptierte Einladung existiert
+let existingInvite = null;
+const now = Date.now();
+try {
+  const ir = await fetch(`${API}/spotcache/invites/${CODE}`);
+  if (ir.ok) {
+    const allInvites = await ir.json();
+    existingInvite = allInvites.find(inv =>
+      (inv.from_code === spot.code || inv.to_code === spot.code) &&
+      inv.status === 'accepted' &&
+      (inv.time_end || 0) > now     // Nur wenn das Zeitfenster noch läuft
+    );
+  }
+} catch {}
 
   if (existingInvite) {
     invBtn.textContent = '✅ Verbunden';
