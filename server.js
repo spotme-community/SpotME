@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// SPOTME SERVER v4.3 – PostgreSQL (inkl. SpotCache & Messenger Invites)
+// SPOTME SERVER v4.4 – PostgreSQL (inkl. SpotCache & Messenger Invites)
 //
 // Features:
 //   • 24h Offline-Sichtbarkeit  → visible_until Timestamp pro Profil
@@ -1760,51 +1760,49 @@ app.post('/api/spotcache/invite', async (req, res) => {
   }
 
   try {
-    // 1. Abgelaufene, akzeptierte Einladungen auf 'expired' setzen
+    // Schritt 1: Alte Einladungen für diesen Spot archivieren.
+    // Wir prüfen BEIDE Richtungen (A→B und B→A) weil Einladungen
+    // symmetrisch sind – es ist egal wer wen zuerst eingeladen hat.
+    // Wir archivieren sowohl 'accepted' als auch 'pending' Einladungen,
+    // damit der UNIQUE-Constraint für den INSERT frei wird.
     await pool.query(
       `UPDATE spot_cache_invites
        SET status = 'expired'
-       WHERE from_code = $1 AND to_code = $2 AND spot_id = $3
-         AND status = 'accepted'
+       WHERE spot_id = $1
+         AND (
+           (from_code = $2 AND to_code = $3) OR
+           (from_code = $3 AND to_code = $2)
+         )
+         AND status IN ('accepted', 'pending')
          AND time_end < $4`,
-      [from, to, spotId, Date.now()]
+      [spotId, from, to, Date.now()]
     );
 
-    // 2. Neue Einladung einfügen
+    // Schritt 2: Neue Einladung einfügen.
+    // ON CONFLICT als Sicherheitsnetz – falls doch noch ein Konflikt
+    // entsteht (z.B. Race Condition), wird die bestehende Einladung
+    // mit den neuen Zeitwerten aktualisiert statt einen Fehler zu werfen.
     await pool.query(
-      `INSERT INTO spot_cache_invites (from_code, to_code, spot_id, time_start, time_end, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+      `INSERT INTO spot_cache_invites
+         (from_code, to_code, spot_id, time_start, time_end, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+       ON CONFLICT (from_code, to_code, spot_id)
+       DO UPDATE SET
+         time_start = EXCLUDED.time_start,
+         time_end   = EXCLUDED.time_end,
+         status     = 'pending',
+         created_at = EXCLUDED.created_at`,
       [from, to, spotId, timeStart, timeEnd, Date.now()]
     );
 
     res.json({ success: true });
+
   } catch (e) {
-    console.error(e);
+    console.error('POST /api/spotcache/invite:', e.message);
     res.status(500).json({ error: 'Fehler beim Einladen' });
   }
 });
 
-
-// 📨 Einladungen abrufen (für mich)
-app.get('/api/spotcache/invites/:code', async (req, res) => {
-  const { code } = req.params;
-  try {
-    const { rows } = await pool.query(`
-      SELECT i.id, i.from_code AS "from", i.to_code AS "to",
-             i.spot_id AS "spotId", i.time_start AS "timeStart", i.time_end AS "timeEnd",
-             i.status, i.checked_in_from AS "checkedInFrom", i.checked_in_to AS "checkedInTo",
-             s.name AS "spotName", s.lat, s.lng, s.wish_tag AS "wishTag"
-      FROM spot_cache_invites i
-      JOIN user_spots s ON i.spot_id = s.id
-      WHERE (i.from_code = $1 OR i.to_code = $1) AND i.status != 'declined'
-      ORDER BY i.created_at DESC
-    `, [code]);
-    res.json(rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Fehler beim Abrufen' });
-  }
-});
 
 // 📨 Einladung beantworten
 app.post('/api/spotcache/invite/respond', async (req, res) => {

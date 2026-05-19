@@ -1833,10 +1833,11 @@ try {
   if (ir.ok) {
     const allInvites = await ir.json();
     existingInvite = allInvites.find(inv =>
-      (inv.from_code === spot.code || inv.to_code === spot.code) &&
-      inv.status === 'accepted' &&
-      (inv.time_end || 0) > now     // Nur wenn das Zeitfenster noch läuft
-    );
+  (inv.from_code === spot.code || inv.to_code === spot.code) &&
+  inv.status === 'accepted' &&
+  (inv.time_end || 0) > now &&
+  inv.spot_id == spot.id   // ← NEU: nur für diesen spezifischen Spot
+);
   }
 } catch {}
 
