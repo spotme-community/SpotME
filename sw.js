@@ -5,7 +5,7 @@
 // Der Browser erkennt den neuen SW, löscht den alten Cache
 // und installiert die neuen Dateien automatisch.
 // ══════════════════════════════════════════════════════════════
-const CACHE_VERSION = 'v13.5';
+const CACHE_VERSION = 'v13.6';
 const CACHE_STATIC  = `spotme-caching-${CACHE_VERSION}`;
 const CACHE_API     = `spotme-api-${CACHE_VERSION}`;
 
@@ -17,7 +17,8 @@ const STATIC_ASSETS = [
   '/profil-caching.html',
   '/landing.html',
   '/404.html',
-  '/manifest.json'
+  '/manifest.json',
+  'icons/splash-1125x2436.png'
 ];
 
 // API-Antworten maximal so lange im Cache behalten (in Sekunden).
