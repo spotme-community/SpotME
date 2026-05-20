@@ -5,7 +5,7 @@
 // Der Browser erkennt den neuen SW, löscht den alten Cache
 // und installiert die neuen Dateien automatisch.
 // ══════════════════════════════════════════════════════════════
-const CACHE_VERSION = 'v12.7';
+const CACHE_VERSION = 'v12.8';
 const CACHE_STATIC  = `spotme-caching-${CACHE_VERSION}`;
 const CACHE_API     = `spotme-api-${CACHE_VERSION}`;
 
