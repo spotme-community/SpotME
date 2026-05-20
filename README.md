@@ -222,6 +222,7 @@ POST   /api/admin/spot-image-action     Spot-Bild freigeben / ablehnen
 - [x] AES-256-Verschlüsselung aller Profildaten
 - [x] Avatar- und Spot-Foto-Moderation durch Admin
 - [x] Service Worker mit intelligenter Cache-Strategie
+- [x] Open-Meteo der Dir das Wetter für die nächsten 8 Stunden für den Spot zeigt.
 
 ### 🔜 Demnächst geplant
 - [ ] **Spot-Besuchshistorie** — nach einem erfolgreichen Check-in wird der Spot in einer persönlichen "Bereits besucht"-Liste gespeichert, die im Profil einsehbar ist
