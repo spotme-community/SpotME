@@ -2,9 +2,9 @@
 <html lang="de">
 <head>
 
-<!-- Eruda – Mobile Console (nur für Debugging)
+<!-- Eruda – Mobile Console (nur für Debugging) -->
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script> -->
+  <script>eruda.init();</script>
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
@@ -313,37 +313,6 @@
 @keyframes chatPulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
-}
-
-/* ── Wetter-Leiste im Spot-Detail ───────────────────────────────────── */
-.weather-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.85rem;
-  background: var(--card);
-  border: 1px solid var(--bord);
-  border-radius: 10px;
-  margin-bottom: 0.75rem;
-  font-size: 0.78rem;
-  color: var(--muted2);
-}
-.weather-icon { font-size: 1.4rem; flex-shrink: 0; }
-.weather-temp {
-  font-family: 'Space Mono', monospace;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text);
-  flex-shrink: 0;
-}
-.weather-details { flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.weather-desc { font-size: 0.72rem; color: var(--muted2); }
-.weather-wind { font-size: 0.65rem; color: var(--muted); }
-.weather-loading {
-  padding: 0.5rem 0.85rem;
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-family: 'Space Mono', monospace;
 }
 
   </style>
@@ -1723,119 +1692,6 @@ function openChatDrawer(partnerCode, partnerName) {
   startChatPolling();
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// WETTER – Open-Meteo API
-// Kostenlos, kein API-Key nötig, direkt vom Frontend aufrufbar.
-// Wir cachen das Ergebnis 10 Minuten pro Koordinate, damit wir
-// beim schnellen Öffnen/Schließen desselben Spots nicht mehrfach
-// die API belasten.
-// ══════════════════════════════════════════════════════════════════════
-
-const weatherCache = new Map(); // key: "lat,lng" → { data, ts }
-
-// Übersetzt den WMO weather_code in ein passendes Emoji.
-// Die Codes sind international standardisiert und von Open-Meteo dokumentiert.
-function weatherEmoji(code) {
-  if (code === 0)          return '☀️';   // Klarer Himmel
-  if (code <= 2)           return '🌤️';   // Überwiegend klar / wenig bewölkt
-  if (code === 3)          return '☁️';   // Bedeckt
-  if (code <= 48)          return '🌫️';   // Nebel / Reifnebel
-  if (code <= 55)          return '🌦️';   // Nieselregen
-  if (code <= 65)          return '🌧️';   // Regen
-  if (code <= 77)          return '❄️';   // Schnee / Schneekörnchen
-  if (code <= 82)          return '🌦️';   // Regenschauer
-  if (code <= 86)          return '🌨️';   // Schneeschauer
-  if (code <= 99)          return '⛈️';   // Gewitter
-  return '🌡️';
-}
-
-// Beschreibung des WMO-Codes auf Deutsch – für die zweite Zeile der Wetter-Leiste
-function weatherDesc(code) {
-  if (code === 0)          return 'Klarer Himmel';
-  if (code <= 2)           return 'Überwiegend klar';
-  if (code === 3)          return 'Bedeckt';
-  if (code <= 48)          return 'Neblig';
-  if (code <= 55)          return 'Nieselregen';
-  if (code <= 65)          return 'Regen';
-  if (code <= 77)          return 'Schneefall';
-  if (code <= 82)          return 'Regenschauer';
-  if (code <= 86)          return 'Schneeschauer';
-  if (code <= 99)          return 'Gewitter';
-  return 'Unbekannt';
-}
-
-// Holt das aktuelle Wetter für eine Koordinate von Open-Meteo.
-// Gibt null zurück wenn die API nicht erreichbar ist – in diesem Fall
-// zeigen wir einfach nichts an statt einen Fehler zu werfen.
-async function fetchWeather(lat, lng) {
-  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-  const now  = Date.now();
-
-  // Cache prüfen: wenn die Daten weniger als 10 Minuten alt sind,
-  // liefern wir sie direkt zurück ohne einen neuen API-Aufruf zu machen.
-  // Das ist wichtig weil der Nutzer den Spot mehrmals öffnen könnte.
-  if (weatherCache.has(key)) {
-    const cached = weatherCache.get(key);
-    if (now - cached.ts < 10 * 60 * 1000) return cached.data;
-  }
-
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast` +
-      `?latitude=${lat}&longitude=${lng}` +
-      `&current=temperature_2m,weather_code,wind_speed_10m,precipitation` +
-      `&wind_speed_unit=kmh` +
-      `&timezone=auto`;
-
-    const res  = await fetch(url);
-    if (!res.ok) return null;
-    const json = await res.json();
-    const data = json.current;
-
-    // Ergebnis im Cache speichern
-    weatherCache.set(key, { data, ts: now });
-    return data;
-  } catch {
-    // Netzwerkfehler → still ignorieren, kein Wetter anzeigen
-    return null;
-  }
-}
-
-// Rendert die Wetter-Leiste in das Spot-Detail-Modal.
-// Wird aufgerufen NACHDEM das innerHTML bereits gesetzt wurde,
-// weil das Element erst dann im DOM existiert.
-async function renderWeatherBar(lat, lng) {
-  const el = document.getElementById('spotWeatherBar');
-  if (!el) return;
-
-  // Lade-Zustand zeigen während wir auf die API warten
-  el.innerHTML = `<div class="weather-loading">⏳ Wetter wird geladen…</div>`;
-
-  const w = await fetchWeather(lat, lng);
-
-  if (!w) {
-    // Kein Wetter verfügbar → Element einfach ausblenden
-    el.style.display = 'none';
-    return;
-  }
-
-  const temp  = Math.round(w.temperature_2m);
-  const wind  = Math.round(w.wind_speed_10m);
-  const code  = w.weather_code;
-  const rain  = w.precipitation > 0
-    ? `· 🌧 ${w.precipitation.toFixed(1)} mm`
-    : '';
-
-  el.innerHTML = `
-    <div class="weather-bar">
-      <div class="weather-icon">${weatherEmoji(code)}</div>
-      <div class="weather-temp">${temp}°C</div>
-      <div class="weather-details">
-        <div class="weather-desc">${weatherDesc(code)}</div>
-        <div class="weather-wind">💨 ${wind} km/h ${rain}</div>
-      </div>
-    </div>`;
-}
-
 // ── SPOT DETAIL ──────────────────────────────────────────────────────────────
 
 async function openSpotDetail(spotId) {
@@ -1883,21 +1739,109 @@ async function openSpotDetail(spotId) {
 
   const fetches = [
     fetch(`${API}/profile/${spot.code}?spot=caching`),
-    fetch(`${API}/avatar/${spot.code}?spot=caching`)
+    fetch(`${API}/avatar/${spot.code}?spot=caching`),
+    // Wetter parallel laden — Open-Meteo, kein API-Key nötig
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${spot.lat}&longitude=${spot.lng}&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code,wind_speed_10m&timezone=auto&wind_speed_unit=kmh&forecast_hours=9`)
   ];
   if (!spotImage) {
     fetches.push(fetch(`${API}/userspots/${spot.code}`).then(r => r.ok ? r.json() : null));
   }
+  let weather = null;
   try {
     const results = await Promise.all(fetches);
     if (results[0]?.ok) profile    = await results[0].json();
     if (results[1]?.ok) avatarData = await results[1].json();
-    if (fetches.length === 3 && results[2]) {
-      const spotData = await results[2];
+    if (results[2]?.ok) {
+      const wd = await results[2].json();
+      weather = wd?.current || null;
+      // Stündliche Vorhersage am weather-Objekt hängen
+      if (weather && wd?.hourly) weather._hourly = wd.hourly;
+    }
+    if (profile?.name) detailSpot._ownerName = profile.name;
+    if (fetches.length === 4 && results[3]) {
+      const spotData = await results[3];
       const match = Array.isArray(spotData) ? spotData.find(s => s.id === spotId) : null;
       if (match?.image) spotImage = match.image;
     }
   } catch {}
+
+  // ── Wetter-Hilfsfunktionen ────────────────────────────────────────────────
+  // WMO Weather Code → Emoji + Beschreibung
+  // https://open-meteo.com/en/docs#weathervariables
+  function weatherIcon(code) {
+    if (code === 0)           return { icon:'☀️',  label:'Klar' };
+    if (code <= 2)            return { icon:'🌤️',  label:'Leicht bewölkt' };
+    if (code === 3)           return { icon:'☁️',  label:'Bedeckt' };
+    if (code <= 49)           return { icon:'🌫️',  label:'Nebel' };
+    if (code <= 59)           return { icon:'🌦️',  label:'Nieselregen' };
+    if (code <= 69)           return { icon:'🌧️',  label:'Regen' };
+    if (code <= 79)           return { icon:'🌨️',  label:'Schnee' };
+    if (code <= 84)           return { icon:'🌦️',  label:'Regenschauer' };
+    if (code <= 94)           return { icon:'⛈️',  label:'Gewitter' };
+    return                         { icon:'⛈️',  label:'Starkes Gewitter' };
+  }
+
+  const weatherHtml = weather ? (() => {
+    const { icon, label } = weatherIcon(weather.weather_code);
+    const temp = Math.round(weather.temperature_2m);
+    const wind = Math.round(weather.wind_speed_10m);
+
+    // Stündliche Vorhersage für die nächsten 8 Stunden
+    // Open-Meteo liefert hourly.time als ISO-Strings, wir suchen
+    // die aktuelle Stunde und nehmen die nächsten 8 Einträge.
+    let forecastHtml = '';
+    if (weather._hourly) {
+      const now      = new Date();
+      const nowHour  = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime();
+      const times    = weather._hourly.time;
+      const temps    = weather._hourly.temperature_2m;
+      const codes    = weather._hourly.weather_code;
+
+      // Startindex = erste Stunde >= jetzt
+      const startIdx = times.findIndex(t => new Date(t).getTime() >= nowHour);
+      if (startIdx !== -1) {
+        const hours = times.slice(startIdx, startIdx + 8);
+        forecastHtml = `
+          <div style="margin-top:0.6rem;display:flex;gap:0.4rem;overflow-x:auto;padding-bottom:4px;">
+            ${hours.map((t, i) => {
+              const idx  = startIdx + i;
+              const hr   = new Date(t).getHours();
+              const wi   = weatherIcon(codes[idx]);
+              const tmp  = Math.round(temps[idx]);
+              const isNow = i === 0;
+              return `<div style="
+                flex-shrink:0;text-align:center;
+                background:${isNow ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)'};
+                border:1px solid ${isNow ? 'rgba(245,158,11,0.3)' : 'var(--bord)'};
+                border-radius:10px;padding:0.5rem 0.6rem;min-width:52px;
+              ">
+                <div style="font-size:0.65rem;color:${isNow ? 'var(--acc)' : 'var(--muted)'};font-family:'Space Mono',monospace;font-weight:${isNow ? '700' : '400'};">
+                  ${isNow ? 'JETZT' : hr + ':00'}
+                </div>
+                <div style="font-size:1.2rem;margin:3px 0;">${wi.icon}</div>
+                <div style="font-size:0.8rem;font-weight:600;">${tmp}°</div>
+              </div>`;
+            }).join('')}
+          </div>`;
+      }
+    }
+
+    return `
+      <div style="
+        background:var(--card); border:1px solid var(--bord);
+        border-radius:12px; padding:0.75rem 1rem; margin-bottom:0.75rem;
+      ">
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <span style="font-size:1.8rem;line-height:1;">${icon}</span>
+          <div style="flex:1;">
+            <div style="font-family:'Space Mono',monospace;font-size:0.68rem;color:var(--muted);letter-spacing:.08em;margin-bottom:2px;">WETTER AM SPOT</div>
+            <div style="font-weight:600;font-size:0.95rem;">${temp}°C · ${label}</div>
+            <div style="font-size:0.72rem;color:var(--muted2);margin-top:1px;">💨 ${wind} km/h</div>
+          </div>
+        </div>
+        ${forecastHtml}
+      </div>`;
+  })() : '';
 
   // ── Spot-Detail HTML rendern ──────────────────────────────────────────────
   const dist = userPos ? (() => {
@@ -1918,6 +1862,7 @@ async function openSpotDetail(spotId) {
              style="width:100%;max-height:200px;object-fit:cover;border-radius:12px;
                     margin-bottom:0.75rem;border:1px solid var(--bord2);cursor:zoom-in;">`
       : ''}
+    ${weatherHtml}
     <div style="display:flex;gap:0.75rem;align-items:flex-start;margin-bottom:0.75rem;">
       <div class="spot-detail-avatar">${avHtml}</div>
       <div style="flex:1;min-width:0;">
@@ -1937,11 +1882,6 @@ async function openSpotDetail(spotId) {
         </div>
       </div>
     </div>
-
-    <!-- Wetter-Leiste: wird nach dem Rendern asynchron befüllt -->
-    <!-- Das div ist zunächst leer und bekommt seinen Inhalt von renderWeatherBar() -->
-    <div id="spotWeatherBar"></div>
-
     ${profile?.bio
       ? `<div style="font-size:0.82rem;color:var(--muted2);line-height:1.55;padding:0.65rem;
                      background:var(--card);border-radius:10px;border:1px solid var(--bord);
@@ -1956,12 +1896,6 @@ async function openSpotDetail(spotId) {
       ? `<div>${offers.map(o => `<span class="profile-chip offer">🎁 ${esc(o)}</span>`).join('')}</div>`
       : ''}
   `;
-
-  // Wetter asynchron nachladen – das passiert parallel zum Button-Setup,
-  // weil fetchWeather() einen eigenen await-Pfad hat und das Modal
-  // nicht blockiert. Der Nutzer sieht zuerst "⏳ Wetter wird geladen…"
-  // und nach ca. 300-500ms erscheint die echte Wetter-Leiste.
-  renderWeatherBar(spot.lat, spot.lng);
 
   // ── Button umschalten – NACH dem Rendern ──────────────────────────────────
   const isOwnSpot = spot.code === CODE;
