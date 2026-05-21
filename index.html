@@ -832,17 +832,49 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// @@ Start
+
 // ── SPOTS ────────────────────────────────────────────────────────────────────
 async function loadAllSpots() {
+  // 1. Zuerst offline gespeicherte Spots laden (sofort sichtbar)
+  const offlineSpots = await loadSpotsOffline();
+  if (offlineSpots.length) {
+    allSpots = offlineSpots;
+    mySpots = allSpots.filter(s => s.code === CODE);
+    document.getElementById('statSpots').textContent = mySpots.length;
+    await renderMarkers();
+  }
+
+  // 2. Dann frisch von der API holen und updaten (nur wenn online)
   try {
-    // Spots ohne Bilder laden (schnell für Karte)
     const r = await fetch(`${API}/userspots/all?noimage=1`);
-    if (r.ok) allSpots = await r.json();
-  } catch { allSpots=[]; }
-  mySpots = allSpots.filter(s => s.code === CODE);
-  document.getElementById('statSpots').textContent = mySpots.length;
-  await renderMarkers();
+    if (r.ok) {
+      const freshSpots = await r.json();
+      allSpots = freshSpots;
+      mySpots = allSpots.filter(s => s.code === CODE);
+      document.getElementById('statSpots').textContent = mySpots.length;
+      await renderMarkers();
+      // 3. Aktualisierte Spots in IndexedDB speichern
+      await saveSpotsOffline(allSpots);
+    }
+  } catch (err) {
+    // Offline – die bereits geladenen offlineSpots bleiben angezeigt
+    console.warn('Kein Netzwerk, verwende Cache-Daten');
+  }
 }
+// @@ End
+
+// ── SPOTS ────────────────────────────────────────────────────────────────────
+// async function loadAllSpots() {
+//  try {
+//    // Spots ohne Bilder laden (schnell für Karte)
+//    const r = await fetch(`${API}/userspots/all?noimage=1`);
+//    if (r.ok) allSpots = await r.json();
+//  } catch { allSpots=[]; }
+//  mySpots = allSpots.filter(s => s.code === CODE);
+//  document.getElementById('statSpots').textContent = mySpots.length;
+//  await renderMarkers();
+//}
 
 async function renderMarkers() {
   markers.forEach(m => m.remove());
