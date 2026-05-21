@@ -315,7 +315,70 @@
   50%       { opacity: 0.6; }
 }
 
-/* ── Wetter-Leiste im Spot-Detail ───────────────────────────────────── */
+/* ── Bevorstehende Treffen Modal ────────────────────────────────────── */
+.meetings-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.meeting-card {
+  background: var(--card);
+  border: 1px solid var(--bord);
+  border-radius: 14px;
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+  position: relative;
+  overflow: hidden;
+}
+/* Farbiger linker Rand zeigt Dringlichkeit auf einen Blick */
+.meeting-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  border-radius: 14px 0 0 14px;
+}
+.meeting-card.urgent::before  { background: #ef4444; }  /* < 2h  → Rot    */
+.meeting-card.today::before   { background: #f59e0b; }  /* heute → Orange */
+.meeting-card.upcoming::before{ background: #10b981; }  /* >heute→ Grün   */
+
+.meeting-spot   { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; }
+.meeting-time   { font-size: 0.75rem; color: var(--muted2); margin-bottom: 0.35rem; }
+.meeting-countdown {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 100px;
+  margin-bottom: 0.5rem;
+}
+.meeting-card.urgent   .meeting-countdown { background:rgba(239,68,68,0.15);  color:#ef4444; }
+.meeting-card.today    .meeting-countdown { background:rgba(245,158,11,0.15); color:#f59e0b; }
+.meeting-card.upcoming .meeting-countdown { background:rgba(16,185,129,0.15); color:#10b981; }
+
+.meeting-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+/* Persistenter Toast für dringende Treffen */
+#urgentToast {
+  position: fixed;
+  top: 72px;
+  left: 1rem; right: 1rem;
+  z-index: 1100;
+  background: rgba(239,68,68,0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(239,68,68,0.5);
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  color: #fff;
+  font-size: 0.82rem;
+  display: none;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(239,68,68,0.3);
+}
+#urgentToast.show { display: flex; align-items: center; gap: 0.6rem; }
 .weather-bar {
   display: flex;
   align-items: center;
@@ -427,6 +490,12 @@
     📨<span class="badge" id="inviteBadge" style="display:none">0</span>
   </button>
 
+  <!-- Bevorstehende Treffen Button -->
+  <button class="icon-btn" id="meetingsBtn" onclick="openMeetingsModal()"
+          title="Bevorstehende Treffen">
+    📅<span class="badge" id="meetingsBadge" style="display:none;background:#10b981;">0</span>
+  </button>
+
   <!-- Chat-Benachrichtigungs-Button -->
   <!-- Öffnet die Chat-Liste mit allen Gesprächen -->
   <button class="icon-btn" id="chatHeaderBtn" onclick="openDrawer('chats')">
@@ -485,6 +554,32 @@
     <div class="modal-actions">
       <button class="btn-ghost" id="spotModalCancel">Abbrechen</button>
       <button class="btn-primary" id="spotModalSave">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Persistenter Toast für dringende Treffen (< 2h) -->
+<div id="urgentToast" onclick="openMeetingsModal()">
+  <span style="font-size:1.2rem;">⏰</span>
+  <div style="flex:1;">
+    <div id="urgentToastText" style="font-weight:600;"></div>
+    <div style="font-size:0.7rem;opacity:0.85;">Tippen für Details →</div>
+  </div>
+  <button onclick="event.stopPropagation();dismissUrgentToast()"
+          style="background:none;border:none;color:#fff;font-size:1.1rem;
+                 cursor:pointer;padding:0.2rem;opacity:0.7;">✕</button>
+</div>
+
+<!-- Bevorstehende Treffen Modal -->
+<div class="modal-overlay" id="meetingsModal" style="z-index:700;">
+  <div class="modal meetings-modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📅 Bevorstehende Treffen</div>
+    <div id="meetingsContent">
+      <div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>
+    </div>
+    <div class="modal-actions" style="margin-top:0.5rem;">
+      <button class="btn-ghost" onclick="closeModals()">Schließen</button>
     </div>
   </div>
 </div>
@@ -1466,19 +1561,32 @@ async function checkIn(inviteId) {
 
 function startInvitePolling() {
   if (invitePollInterval) clearInterval(invitePollInterval);
-  invitePollInterval=setInterval(async()=>{
+  invitePollInterval = setInterval(async () => {
     try {
-      const r=await fetch(`${API}/spotcache/invites/${CODE}`); if(!r.ok) return;
-      const invites=await r.json(); const count=invites.length;
-      document.getElementById('statInvites').textContent=count;
-      if (count>knownInviteCount&&knownInviteCount>=0) {
-        updateInviteBadge(count-knownInviteCount);
+      const r = await fetch(`${API}/spotcache/invites/${CODE}`);
+      if (!r.ok) return;
+      const invites = await r.json();
+      const count   = invites.length;
+
+      document.getElementById('statInvites').textContent = count;
+
+      if (count > knownInviteCount && knownInviteCount >= 0) {
+        updateInviteBadge(count - knownInviteCount);
         document.getElementById('inviteHeaderBtn').classList.add('active');
-        if (Notification.permission==='granted') new Notification('🧭 Neue Einladung!',{body:'Jemand möchte sich an deinem Spot treffen.'});
+        if (Notification.permission === 'granted') {
+          new Notification('🧭 Neue Einladung!', {
+            body: 'Jemand möchte sich an deinem Spot treffen.'
+          });
+        }
       }
-      knownInviteCount=count;
+      knownInviteCount = count;
+
+      // Prüfen ob ein Treffen in weniger als 2 Stunden bevorsteht →
+      // urgentToast anzeigen wenn ja
+      checkUpcomingMeetings(invites);
+
     } catch {}
-  },8000);
+  }, 8000);
 }
 
 
@@ -2027,6 +2135,208 @@ async function renderInviteWeather(invId, lat, lng, timeStart) {
   el.innerHTML = `<div class="weather-forecast" style="border-radius:8px;border:1px solid var(--bord);">
     ${cards}
   </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// BEVORSTEHENDE TREFFEN – Modal + Benachrichtigungen + Stornieren
+// ══════════════════════════════════════════════════════════════════════
+
+// Merkt sich welche Einladungs-IDs bereits einen urgentToast ausgelöst haben.
+// Ohne diesen Schutz würde der Toast bei jedem Polling-Tick neu erscheinen.
+const shownUrgentToasts = new Set();
+
+// Öffnet das "Bevorstehende Treffen"-Modal und lädt die Daten frisch vom Server.
+// Wir laden immer frisch statt aus dem Cache weil sich der Status zwischen
+// zwei Polling-Zyklen geändert haben könnte.
+async function openMeetingsModal() {
+  document.getElementById('meetingsModal').classList.add('show');
+  const content = document.getElementById('meetingsContent');
+  content.innerHTML = `<div class="empty-state"><div class="es-icon">⏳</div>Lädt…</div>`;
+
+  let invites = [];
+  try {
+    const r = await fetch(`${API}/spotcache/invites/${CODE}`);
+    if (r.ok) invites = await r.json();
+  } catch {}
+
+  const now = Date.now();
+
+  // Nur akzeptierte, noch nicht abgelaufene Einladungen anzeigen –
+  // das sind die echten "bevorstehenden Treffen"
+  const upcoming = invites
+    .filter(inv => inv.status === 'accepted' && (inv.time_end || 0) > now)
+    .sort((a, b) => (a.time_start || 0) - (b.time_start || 0)); // Nächstes zuerst
+
+  if (!upcoming.length) {
+    content.innerHTML = `<div class="empty-state">
+      <div class="es-icon">📅</div>
+      Keine bevorstehenden Treffen.
+      <div style="font-size:0.78rem;color:var(--muted);margin-top:0.5rem;text-align:center;">
+        Akzeptierte Einladungen erscheinen hier.
+      </div>
+    </div>`;
+    return;
+  }
+
+  content.innerHTML = upcoming.map(inv => {
+    const timeStart  = inv.time_start || 0;
+    const timeEnd    = inv.time_end   || 0;
+    const diffMs     = timeStart - now;
+    const diffHours  = diffMs / 3600000;
+
+    // Dringlichkeitsklasse bestimmt die Farbe des linken Rands und des Countdowns
+    const urgency = diffHours < 2      ? 'urgent'
+                  : diffHours < 24     ? 'today'
+                  : 'upcoming';
+
+    const countdown = formatCountdown(timeStart);
+    const isSender  = inv.from_code === CODE;
+
+    return `<div class="meeting-card ${urgency}">
+      <div class="meeting-spot">${esc(inv.spot_name || 'Spot')}</div>
+      <div class="meeting-time">
+        ${formatDateTime(timeStart)} – ${formatDateTime(timeEnd)}
+      </div>
+      <div class="meeting-countdown">${countdown}</div>
+
+      <!-- Wetter für diesen Treffpunkt – wird asynchron nachgeladen -->
+      <div id="mtgWeather_${inv.id}"
+           style="font-size:0.68rem;color:var(--muted);font-family:'Space Mono',monospace;
+                  margin-bottom:0.4rem;">
+        ⏳ Wetter…
+      </div>
+
+      <div class="meeting-actions">
+        <button class="sc-btn navigate" style="flex:1;"
+                data-nav-inv="${inv.spot_id}">🧭 Route</button>
+        <button class="sc-btn primary" style="flex:1;"
+                data-ci="${inv.id}">📍 Check-in</button>
+        <button class="sc-btn success" style="padding:0.65rem 0.8rem;"
+                data-chat="${isSender ? inv.to_code : inv.from_code}"
+                data-chatname="${esc(inv.spot_name || '')}">💬</button>
+        <button class="sc-btn danger" style="padding:0.65rem 0.8rem;"
+                data-cancel="${inv.id}"
+                title="Treffen stornieren">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Event-Listener für alle Buttons
+  content.querySelectorAll('[data-nav-inv]').forEach(b =>
+    b.addEventListener('click', () => {
+      const spot = allSpots.find(s => s.id == b.dataset.navInv);
+      if (spot) { closeModals(); navigateToSpot(spot.lat, spot.lng); }
+    })
+  );
+  content.querySelectorAll('[data-ci]').forEach(b =>
+    b.addEventListener('click', () => checkIn(+b.dataset.ci))
+  );
+  content.querySelectorAll('[data-chat]').forEach(b =>
+    b.addEventListener('click', () => {
+      closeModals();
+      setTimeout(() => openChatDrawer(b.dataset.chat, b.dataset.chatname || b.dataset.chat), 300);
+    })
+  );
+  content.querySelectorAll('[data-cancel]').forEach(b =>
+    b.addEventListener('click', () => cancelInvite(+b.dataset.cancel))
+  );
+
+  // Wetter für jede Karte asynchron nachladen – kein Blocking des Modals
+  upcoming.forEach(inv => {
+    const spot = allSpots.find(s => s.id == inv.spot_id);
+    if (spot) renderMeetingWeather(inv.id, spot.lat, spot.lng, inv.time_start);
+  });
+}
+
+// Rendert die Wetter-Vorhersage für eine Meeting-Karte.
+// Identisch zu renderInviteWeather() – wiederverwendet dieselbe fetchWeather()-Logik.
+async function renderMeetingWeather(invId, lat, lng, timeStart) {
+  const el = document.getElementById(`mtgWeather_${invId}`);
+  if (!el) return;
+  const w = await fetchWeather(lat, lng);
+  if (!w || !w.hourly) { el.style.display = 'none'; return; }
+
+  const meetingISO = new Date(timeStart).toISOString().slice(0, 13);
+  const centerIdx  = w.hourly.time.findIndex(t => t.startsWith(meetingISO));
+  if (centerIdx < 0) { el.innerHTML = '<span style="opacity:0.5;">Vorhersage nicht verfügbar</span>'; return; }
+
+  const startIdx = Math.max(0, centerIdx - 1);
+  const hours    = w.hourly.time.slice(startIdx, centerIdx + 5);
+
+  el.innerHTML = `<div class="weather-forecast"
+       style="border-radius:8px;border:1px solid var(--bord);margin-top:0.25rem;">
+    ${hours.map((t, i) => {
+      const idx      = startIdx + i;
+      const temp     = Math.round(w.hourly.temperature_2m[idx]);
+      const code     = w.hourly.weather_code[idx];
+      const rain     = w.hourly.precipitation_probability[idx] || 0;
+      const label    = idx === centerIdx ? '📍' : t.slice(11, 16);
+      const isCenter = idx === centerIdx ? 'now' : '';
+      return `<div class="wf-card ${isCenter}">
+        <div class="wf-hour">${label}</div>
+        <div class="wf-emoji">${weatherEmoji(code)}</div>
+        <div class="wf-temp">${temp}°</div>
+        ${rain > 0
+          ? `<div class="wf-rain">${rain}%</div>`
+          : '<div class="wf-rain" style="visibility:hidden">0%</div>'}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// Storniert eine Einladung nach Bestätigung durch den Nutzer.
+// Nach dem Stornieren wird das Modal neu geladen damit die Karte verschwindet.
+async function cancelInvite(id) {
+  const ok = confirm('Treffen wirklich stornieren?\nDer andere wird automatisch benachrichtigt.');
+  if (!ok) return;
+
+  const token = localStorage.getItem('sm_token');
+  try {
+    const res = await fetch(`${API}/spotcache/invite/${id}/cancel`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ code: CODE, token })
+    });
+    const data = await res.json();
+    if (data.success) {
+      toast('✅ Treffen storniert – Partner wurde informiert');
+      // Modal-Inhalt neu laden damit die stornierte Karte sofort verschwindet
+      openMeetingsModal();
+    } else {
+      toast('⚠️ ' + (data.error || 'Fehler beim Stornieren'));
+    }
+  } catch {
+    toast('⚠️ Server nicht erreichbar');
+  }
+}
+
+// Blendet den urgentToast aus und merkt sich dass er für heute weggeklickt wurde.
+function dismissUrgentToast() {
+  document.getElementById('urgentToast').classList.remove('show');
+}
+
+// Prüft ob ein Treffen in weniger als 2 Stunden bevorsteht und zeigt
+// einen persistenten roten Toast. Wird vom startInvitePolling() aufgerufen.
+// Der Toast erscheint nur einmal pro Einladung – shownUrgentToasts verhindert
+// dass er bei jedem Polling-Tick erneut aufpoppt.
+function checkUpcomingMeetings(invites) {
+  const now = Date.now();
+  const twoHours = 2 * 60 * 60 * 1000;
+
+  const urgent = invites.find(inv =>
+    inv.status === 'accepted' &&
+    (inv.time_start || 0) > now &&
+    (inv.time_start || 0) - now < twoHours &&
+    !shownUrgentToasts.has(inv.id)
+  );
+
+  if (urgent) {
+    shownUrgentToasts.add(urgent.id);
+    const countdown = formatCountdown(urgent.time_start);
+    document.getElementById('urgentToastText').textContent =
+      `Treffen bei "${urgent.spot_name || 'Spot'}" ${countdown}`;
+    document.getElementById('urgentToast').classList.add('show');
+  }
 }
 
 // ── SPOT DETAIL ──────────────────────────────────────────────────────────────

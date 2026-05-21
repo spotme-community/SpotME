@@ -1829,6 +1829,85 @@ app.post('/api/spotcache/invite/respond', async (req, res) => {
   }
 });
 
+// ❌ Einladung stornieren
+// Sowohl Sender (from_code) als auch Empfänger (to_code) dürfen stornieren.
+// Der Partner bekommt automatisch eine System-Nachricht damit er informiert ist.
+// Wir setzen status = 'cancelled' statt zu löschen – so bleibt die Historie erhalten.
+app.patch('/api/spotcache/invite/:id/cancel', async (req, res) => {
+  const { id }          = req.params;
+  const { code, token } = req.body;
+
+  if (!code || !token) {
+    return res.status(400).json({ error: 'Code und Token erforderlich' });
+  }
+
+  try {
+    // Einladung laden und prüfen ob der anfragende Nutzer beteiligt ist.
+    // Sowohl Sender als auch Empfänger dürfen stornieren.
+    const inv = await pool.query(
+      `SELECT i.*, u.name AS spot_name
+       FROM spot_cache_invites i
+       LEFT JOIN user_spots u ON u.id = i.spot_id
+       WHERE i.id = $1 AND (i.from_code = $2 OR i.to_code = $2)`,
+      [id, code]
+    );
+    if (!inv.rows.length) {
+      return res.status(403).json({ error: 'Nicht berechtigt oder nicht gefunden' });
+    }
+
+    // Token validieren – ein gestohlener Code allein reicht nicht
+    const auth = await pool.query(
+      `SELECT token FROM profiles WHERE code = $1 AND spot = 'caching'`,
+      [code]
+    );
+    if (!auth.rows.length || auth.rows[0].token !== token) {
+      return res.status(403).json({ error: 'Ungültiger Token' });
+    }
+
+    const invite   = inv.rows[0];
+    const spotName = invite.spot_name || 'Spot';
+
+    // Nur aktive Einladungen können storniert werden –
+    // abgelaufene oder bereits abgelehnte brauchen keine Stornierung mehr
+    if (['expired', 'cancelled', 'declined', 'completed'].includes(invite.status)) {
+      return res.status(400).json({ error: 'Diese Einladung kann nicht mehr storniert werden' });
+    }
+
+    // Status auf 'cancelled' setzen
+    await pool.query(
+      `UPDATE spot_cache_invites SET status = 'cancelled' WHERE id = $1`,
+      [id]
+    );
+
+    // Partner bestimmen: wenn ich der Sender bin, ist der Partner der Empfänger und umgekehrt
+    const partnerCode = invite.from_code === code
+      ? invite.to_code
+      : invite.from_code;
+
+    // System-Nachricht an den Partner schicken damit er informiert wird.
+    // spot_type = 'system' unterscheidet diese Nachricht von normalen Chat-Nachrichten –
+    // das Frontend kann sie dann anders darstellen (z.B. grau und kursiv)
+    await pool.query(
+      `INSERT INTO offline_messages
+         (recipient, sender_code, sender_name, message, spot_type)
+       VALUES ($1, $2, $3, $4, 'system')`,
+      [
+        partnerCode,
+        code,
+        'System',
+        `❌ Das Treffen bei "${spotName}" wurde storniert.`
+      ]
+    );
+
+    console.log(`❌ Einladung ${id} storniert von ${code} → Partner ${partnerCode} informiert`);
+    res.json({ success: true });
+
+  } catch (e) {
+    console.error('PATCH /cancel:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
 // 📍 Einchecken am Treffpunkt
 app.post('/api/spotcache/checkin', async (req, res) => {
   const { id, code, lat, lng } = req.body;
