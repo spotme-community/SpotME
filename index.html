@@ -1213,6 +1213,22 @@ async function loadInvitesIntoDrawer(body) {
     const timeEnd   = inv.time_end   || 0;
 
     let statusHtml = inv.status === 'pending'
+    // @@
+    let profileNameCache = new Map();
+        async function fetchProfileName(code) {
+       if (profileNameCache.has(code)) return profileNameCache.get(code);
+        try {
+        const res = await fetch(`${API}/profile/${code}?spot=caching`);
+       const data = await res.json();
+      const name = data?.name || code;
+      profileNameCache.set(code, name);
+    return name;
+  } catch {
+    return code;
+  }
+  }
+  // @@
+    
       ? `<span class="status-pill pending">⏳ Ausstehend</span>`
       : inv.status === 'accepted'
         ? (timeStart <= now && timeEnd >= now
