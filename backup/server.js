@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// SPOTME SERVER v4.3 – PostgreSQL (inkl. SpotCache & Messenger Invites)
+// SPOTME SERVER v4.4 – PostgreSQL (inkl. SpotCache & Messenger Invites)
 //
 // Features:
 //   • 24h Offline-Sichtbarkeit  → visible_until Timestamp pro Profil
@@ -275,7 +275,7 @@ await pool.query(`
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image_status TEXT DEFAULT 'pending'`).catch(() => {});
-    console.log('✅ v4.5 – Alle Spalten bereit (inkl. SpotCache)');
+    console.log('✅ v4.6 – Alle Spalten bereit (inkl. SpotCache)');
   } catch (e) {
     console.log('ℹ️ Spalten existieren bereits oder konnten nicht angelegt werden');
   }
@@ -1577,8 +1577,9 @@ app.post('/api/userspots', async (req, res) => {
   }
   try {
     await pool.query(
-      `INSERT INTO user_spots (code, lat, lng, name, description, wish_tag, image, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      // active=true ist der Standard – jeder neue Spot ist sofort sichtbar
+      `INSERT INTO user_spots (code, lat, lng, name, description, wish_tag, image, active, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
       [code, lat, lng, name, description || null, wishTag, image || null, Date.now()]
     );
     res.json({ success: true });
@@ -1589,14 +1590,16 @@ app.post('/api/userspots', async (req, res) => {
 });
 
 // 🌍 Alle öffentlichen Spots abrufen (für die Karte)
+// Nur aktive Spots werden geliefert – deaktivierte Spots sind unsichtbar
 app.get('/api/userspots/all', async (req, res) => {
   const noImage = req.query.noimage === '1';
   try {
     const { rows } = await pool.query(
       `SELECT id, code, lat, lng, name, description, wish_tag AS "wishTag",
               ${noImage ? 'NULL AS image' : 'CASE WHEN image_status = \'approved\' THEN image ELSE NULL END AS image'},
-              created_at
+              active, created_at
        FROM user_spots
+       WHERE active = true
        ORDER BY created_at DESC`
     );
     res.json(rows);
@@ -1669,6 +1672,59 @@ app.delete('/api/userspots/:id', async (req, res) => {
   }
 });
 
+// ⏸ Spot deaktivieren / reaktivieren (Soft Delete)
+// PATCH statt DELETE – wir ändern nur den active-Status, löschen nichts.
+// Der Spot bleibt in der Datenbank erhalten und kann jederzeit reaktiviert werden.
+// Auf der Karte und in der Spot-Liste erscheint er solange active=false ist nicht mehr.
+app.patch('/api/userspots/:id/toggle', async (req, res) => {
+  const { id }          = req.params;
+  const { code, token } = req.body;
+
+  if (!code || !token) {
+    return res.status(400).json({ error: 'Code und Token erforderlich' });
+  }
+
+  try {
+    // Sicherheits-Check 1: Gehört dieser Spot wirklich diesem Nutzer?
+    // Wir prüfen gleichzeitig ob der Spot überhaupt existiert.
+    const check = await pool.query(
+      `SELECT active FROM user_spots WHERE id = $1 AND code = $2`,
+      [id, code]
+    );
+    if (!check.rows.length) {
+      return res.status(403).json({ error: 'Nicht berechtigt oder Spot nicht gefunden' });
+    }
+
+    // Sicherheits-Check 2: Ist das Token gültig?
+    // Ein gestohlener Code allein reicht nicht aus – das Token muss stimmen.
+    const auth = await pool.query(
+      `SELECT token FROM profiles WHERE code = $1 AND spot = 'caching'`,
+      [code]
+    );
+    if (!auth.rows.length || auth.rows[0].token !== token) {
+      return res.status(403).json({ error: 'Ungültiger Token' });
+    }
+
+    // Status umkehren: true → false, false → true
+    // Das NOT in SQL funktioniert wie das ! in JavaScript
+    const result = await pool.query(
+      `UPDATE user_spots
+       SET active = NOT active
+       WHERE id = $1 AND code = $2
+       RETURNING active`,
+      [id, code]
+    );
+
+    const newStatus = result.rows[0].active;
+    console.log(`🔄 Spot ${id} (${code}): ${newStatus ? '▶ aktiviert' : '⏸ deaktiviert'}`);
+    res.json({ success: true, active: newStatus });
+
+  } catch (e) {
+    console.error('PATCH /api/userspots/toggle:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
 // 🟣 Gemeinsame Spots finden (gleicher Wunsch + Nähe)
 app.get('/api/userspots/common/:code1/:code2', async (req, res) => {
   const { code1, code2 } = req.params;
@@ -1691,12 +1747,10 @@ app.get('/api/userspots/common/:code1/:code2', async (req, res) => {
   }
 });
 
-// 📨 Treffpunkt-Einladung senden
 
+// 📨 Treffpunkt-Einladung senden
 app.post('/api/spotcache/invite', async (req, res) => {
   const { from, to } = req.body;
-
-  // Beide Schreibweisen akzeptieren – camelCase und snake_case
   const spotId    = req.body.spot_id    || req.body.spotId;
   const timeStart = req.body.time_start || req.body.timeStart;
   const timeEnd   = req.body.time_end   || req.body.timeEnd;
@@ -1704,39 +1758,51 @@ app.post('/api/spotcache/invite', async (req, res) => {
   if (!from || !to || !spotId || !timeStart || !timeEnd) {
     return res.status(400).json({ error: 'Fehlende Felder' });
   }
+
   try {
+    // Schritt 1: Alte Einladungen für diesen Spot archivieren.
+    // Wir prüfen BEIDE Richtungen (A→B und B→A) weil Einladungen
+    // symmetrisch sind – es ist egal wer wen zuerst eingeladen hat.
+    // Wir archivieren sowohl 'accepted' als auch 'pending' Einladungen,
+    // damit der UNIQUE-Constraint für den INSERT frei wird.
     await pool.query(
-      `INSERT INTO spot_cache_invites (from_code, to_code, spot_id, time_start, time_end, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+      `UPDATE spot_cache_invites
+       SET status = 'expired'
+       WHERE spot_id = $1
+         AND (
+           (from_code = $2 AND to_code = $3) OR
+           (from_code = $3 AND to_code = $2)
+         )
+         AND status IN ('accepted', 'pending')
+         AND time_end < $4`,
+      [spotId, from, to, Date.now()]
+    );
+
+    // Schritt 2: Neue Einladung einfügen.
+    // ON CONFLICT als Sicherheitsnetz – falls doch noch ein Konflikt
+    // entsteht (z.B. Race Condition), wird die bestehende Einladung
+    // mit den neuen Zeitwerten aktualisiert statt einen Fehler zu werfen.
+    await pool.query(
+      `INSERT INTO spot_cache_invites
+         (from_code, to_code, spot_id, time_start, time_end, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+       ON CONFLICT (from_code, to_code, spot_id)
+       DO UPDATE SET
+         time_start = EXCLUDED.time_start,
+         time_end   = EXCLUDED.time_end,
+         status     = 'pending',
+         created_at = EXCLUDED.created_at`,
       [from, to, spotId, timeStart, timeEnd, Date.now()]
     );
+
     res.json({ success: true });
+
   } catch (e) {
-    console.error(e);
+    console.error('POST /api/spotcache/invite:', e.message);
     res.status(500).json({ error: 'Fehler beim Einladen' });
   }
 });
 
-// 📨 Einladungen abrufen (für mich)
-app.get('/api/spotcache/invites/:code', async (req, res) => {
-  const { code } = req.params;
-  try {
-    const { rows } = await pool.query(`
-      SELECT i.id, i.from_code AS "from", i.to_code AS "to",
-             i.spot_id AS "spotId", i.time_start AS "timeStart", i.time_end AS "timeEnd",
-             i.status, i.checked_in_from AS "checkedInFrom", i.checked_in_to AS "checkedInTo",
-             s.name AS "spotName", s.lat, s.lng, s.wish_tag AS "wishTag"
-      FROM spot_cache_invites i
-      JOIN user_spots s ON i.spot_id = s.id
-      WHERE (i.from_code = $1 OR i.to_code = $1) AND i.status != 'declined'
-      ORDER BY i.created_at DESC
-    `, [code]);
-    res.json(rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Fehler beim Abrufen' });
-  }
-});
 
 // 📨 Einladung beantworten
 app.post('/api/spotcache/invite/respond', async (req, res) => {
@@ -1760,6 +1826,85 @@ app.post('/api/spotcache/invite/respond', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Fehler' });
+  }
+});
+
+// ❌ Einladung stornieren
+// Sowohl Sender (from_code) als auch Empfänger (to_code) dürfen stornieren.
+// Der Partner bekommt automatisch eine System-Nachricht damit er informiert ist.
+// Wir setzen status = 'cancelled' statt zu löschen – so bleibt die Historie erhalten.
+app.patch('/api/spotcache/invite/:id/cancel', async (req, res) => {
+  const { id }          = req.params;
+  const { code, token } = req.body;
+
+  if (!code || !token) {
+    return res.status(400).json({ error: 'Code und Token erforderlich' });
+  }
+
+  try {
+    // Einladung laden und prüfen ob der anfragende Nutzer beteiligt ist.
+    // Sowohl Sender als auch Empfänger dürfen stornieren.
+    const inv = await pool.query(
+      `SELECT i.*, u.name AS spot_name
+       FROM spot_cache_invites i
+       LEFT JOIN user_spots u ON u.id = i.spot_id
+       WHERE i.id = $1 AND (i.from_code = $2 OR i.to_code = $2)`,
+      [id, code]
+    );
+    if (!inv.rows.length) {
+      return res.status(403).json({ error: 'Nicht berechtigt oder nicht gefunden' });
+    }
+
+    // Token validieren – ein gestohlener Code allein reicht nicht
+    const auth = await pool.query(
+      `SELECT token FROM profiles WHERE code = $1 AND spot = 'caching'`,
+      [code]
+    );
+    if (!auth.rows.length || auth.rows[0].token !== token) {
+      return res.status(403).json({ error: 'Ungültiger Token' });
+    }
+
+    const invite   = inv.rows[0];
+    const spotName = invite.spot_name || 'Spot';
+
+    // Nur aktive Einladungen können storniert werden –
+    // abgelaufene oder bereits abgelehnte brauchen keine Stornierung mehr
+    if (['expired', 'cancelled', 'declined', 'completed'].includes(invite.status)) {
+      return res.status(400).json({ error: 'Diese Einladung kann nicht mehr storniert werden' });
+    }
+
+    // Status auf 'cancelled' setzen
+    await pool.query(
+      `UPDATE spot_cache_invites SET status = 'cancelled' WHERE id = $1`,
+      [id]
+    );
+
+    // Partner bestimmen: wenn ich der Sender bin, ist der Partner der Empfänger und umgekehrt
+    const partnerCode = invite.from_code === code
+      ? invite.to_code
+      : invite.from_code;
+
+    // System-Nachricht an den Partner schicken damit er informiert wird.
+    // spot_type = 'system' unterscheidet diese Nachricht von normalen Chat-Nachrichten –
+    // das Frontend kann sie dann anders darstellen (z.B. grau und kursiv)
+    await pool.query(
+      `INSERT INTO offline_messages
+         (recipient, sender_code, sender_name, message, spot_type)
+       VALUES ($1, $2, $3, $4, 'system')`,
+      [
+        partnerCode,
+        code,
+        'System',
+        `❌ Das Treffen bei "${spotName}" wurde storniert.`
+      ]
+    );
+
+    console.log(`❌ Einladung ${id} storniert von ${code} → Partner ${partnerCode} informiert`);
+    res.json({ success: true });
+
+  } catch (e) {
+    console.error('PATCH /cancel:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
   }
 });
 
