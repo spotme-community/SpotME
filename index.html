@@ -2,9 +2,9 @@
 <html lang="de">
 <head>
 
-<!-- Eruda – Mobile Console (nur für Debugging)
+<!-- Eruda – Mobile Console (nur für Debugging) -->
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script> -->
+  <script>eruda.init();</script>
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
@@ -1333,29 +1333,26 @@ async function loadInvitesIntoDrawer(body) {
   // Wir brauchen dafür die Spot-Koordinaten – die kommen aus allSpots.
   // Das passiert asynchron nach dem Rendern, damit der Drawer
   // sofort erscheint und das Wetter dann still nachlädt.
-  active
+  
+active
     .filter(inv => inv.status === 'accepted')
     .forEach(inv => {
-      // Spot-Koordinaten aus dem lokalen allSpots-Array holen –
-      // kein zusätzlicher Server-Aufruf nötig
       const spot = allSpots.find(s => s.id == inv.spot_id);
-if (spot) {
-   renderMeetingWeather(inv.id, spot.lat, spot.lng, inv.time_start);
-  } else if (inv.spot_lat && inv.spot_lng) {
-   // Fallback: Koordinaten direkt aus dem Invite-Objekt
-   renderMeetingWeather(inv.id, inv.spot_lat, inv.spot_lng, inv.time_start);
-  } else {
-    // allSpots noch nicht geladen — kurz warten und nochmal versuchen
-    loadAllSpots().then(() => {
-      const s = allSpots.find(x => x.id == inv.spot_id);
-      if (s) renderMeetingWeather(inv.id, s.lat, s.lng, inv.time_start);
-      else {
-      const el = document.getElementById(`mtgWeather_${inv.id}`);
-      if (el) el.style.display = 'none';
-     }
-   });
-}
-
+      if (spot) {
+        renderMeetingWeather(inv.id, spot.lat, spot.lng, inv.time_start);
+      } else if (inv.spot_lat && inv.spot_lng) {
+        renderMeetingWeather(inv.id, inv.spot_lat, inv.spot_lng, inv.time_start);
+      } else {
+        loadAllSpots().then(() => {
+          const s = allSpots.find(x => x.id == inv.spot_id);
+          if (s) renderMeetingWeather(inv.id, s.lat, s.lng, inv.time_start);
+          else {
+            const el = document.getElementById(`mtgWeather_${inv.id}`);
+            if (el) el.style.display = 'none';
+          }
+        });
+      }
+    });
 
 // ── CHAT-LISTE ────────────────────────────────────────────────────────────────
 // Zeigt alle Gespräche aus dem localStorage – wie eine WhatsApp-Übersicht.
