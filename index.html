@@ -1248,6 +1248,7 @@ async function loadInvitesIntoDrawer(body) {
               ${formatDateTime(timeStart)} – ${formatDateTime(timeEnd)}
             </div>
             ${!isSender ? `<div class="sc-detail">📨 Von: ${esc(inv.from_name || inv.from_code)}</div>` : ''}
+            ${!isSender ? `<div class="sc-detail" id="inviteSender_${inv.id}">📨 Von: wird geladen…</div>` : ''}
           </div>
         </div>
 
