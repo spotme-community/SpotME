@@ -1289,14 +1289,35 @@ app.get('/api/spotcache/invites/:code', async (req, res) => {
   const { code } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT i.*, u.name AS spot_name
+      // Wir joinieren die profiles-Tabelle ZWEIMAL – einmal für den Sender (pf)
+      // und einmal für den Empfänger (pt). LEFT JOIN statt INNER JOIN damit die
+      // Einladung auch erscheint wenn ein Profil zwischenzeitlich gelöscht wurde.
+      // Die Namen sind verschlüsselt gespeichert und werden unten entschlüsselt.
+      `SELECT i.*,
+              u.name  AS spot_name,
+              u.lat,
+              u.lng,
+              pf.name AS from_name_enc,
+              pt.name AS to_name_enc
        FROM spot_cache_invites i
-       JOIN user_spots u ON u.id = i.spot_id
+       JOIN user_spots u   ON u.id       = i.spot_id
+       LEFT JOIN profiles pf ON pf.code  = i.from_code AND pf.spot = 'caching'
+       LEFT JOIN profiles pt ON pt.code  = i.to_code   AND pt.spot = 'caching'
        WHERE i.from_code = $1 OR i.to_code = $1
        ORDER BY i.created_at DESC`,
       [code]
     );
-    res.json(rows);
+
+    // Namen entschlüsseln bevor sie ans Frontend gehen –
+    // decrypt() gibt null zurück wenn der Wert null/undefined ist, also sicher.
+    res.json(rows.map(row => ({
+      ...row,
+      from_name:     row.from_name_enc ? decrypt(row.from_name_enc) : null,
+      to_name:       row.to_name_enc   ? decrypt(row.to_name_enc)   : null,
+      // Rohdaten entfernen damit keine verschlüsselten Werte ans Frontend gelangen
+      from_name_enc: undefined,
+      to_name_enc:   undefined,
+    })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

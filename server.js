@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// SPOTME SERVER v4.4 – PostgreSQL (inkl. SpotCache & Messenger Invites)
+// SPOTME SERVER v4.7 – PostgreSQL (inkl. SpotCache & Messenger Invites)
 //
 // Features:
 //   • 24h Offline-Sichtbarkeit  → visible_until Timestamp pro Profil
@@ -275,7 +275,7 @@ await pool.query(`
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image_status TEXT DEFAULT 'pending'`).catch(() => {});
-    console.log('✅ v4.6 – Alle Spalten bereit (inkl. SpotCache)');
+    console.log('✅ v4.7 – Alle Spalten bereit (inkl. SpotCache)');
   } catch (e) {
     console.log('ℹ️ Spalten existieren bereits oder konnten nicht angelegt werden');
   }
@@ -1929,6 +1929,100 @@ app.patch('/api/spotcache/invite/:id/cancel', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// FAVORITEN – Öffentliche Spot-Kategorien ohne Einladungspflicht
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ⭐ Favorit hinzufügen
+app.post('/api/favorites', async (req, res) => {
+  const { code, spot_id } = req.body;
+  if (!code || !spot_id) return res.status(400).json({ error: 'code und spot_id erforderlich' });
+  try {
+    await pool.query(
+      `INSERT INTO spot_favorites (code, spot_id, created_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (code, spot_id) DO NOTHING`,
+      [code, spot_id, Date.now()]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('POST /api/favorites:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// ⭐ Favorit entfernen
+app.delete('/api/favorites/:spotId', async (req, res) => {
+  const { spotId } = req.params;
+  const { code }   = req.body;
+  if (!code) return res.status(400).json({ error: 'code erforderlich' });
+  try {
+    await pool.query(
+      `DELETE FROM spot_favorites WHERE code = $1 AND spot_id = $2`,
+      [code, spotId]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('DELETE /api/favorites:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// ⭐ Alle Favoriten eines Nutzers abrufen – mit Spot-Details und letztem Check-in
+app.get('/api/favorites/:code', async (req, res) => {
+  const { code } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT f.spot_id,
+              u.name      AS spot_name,
+              u.lat, u.lng,
+              u.wish_tag  AS "wishTag",
+              u.code      AS owner_code,
+              -- Letzter Check-in an diesem Spot (aus verifications)
+              v.created_at AS last_checkin,
+              v.from_code  AS last_checkin_code,
+              p.name       AS last_checkin_name_enc
+       FROM spot_favorites f
+       JOIN user_spots u ON u.id = f.spot_id
+       -- Neuester Check-in pro Spot – LATERAL macht das effizient
+       LEFT JOIN LATERAL (
+         SELECT from_code, created_at
+         FROM verifications
+         WHERE to_code = u.code AND to_spot = 'caching' AND type = 'personal'
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) v ON true
+       LEFT JOIN profiles p ON p.code = v.from_code AND p.spot = 'caching'
+       WHERE f.code = $1
+         AND u.active = true
+       ORDER BY f.created_at DESC`,
+      [code]
+    );
+    res.json(rows.map(r => ({
+      ...r,
+      last_checkin_name: r.last_checkin_name_enc ? decrypt(r.last_checkin_name_enc) : null,
+      last_checkin_name_enc: undefined,
+    })));
+  } catch (e) {
+    console.error('GET /api/favorites:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// ⭐ Prüfen ob ein Spot bereits als Favorit gespeichert ist (für den ⭐-Button)
+app.get('/api/favorites/:code/:spotId', async (req, res) => {
+  const { code, spotId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM spot_favorites WHERE code = $1 AND spot_id = $2`,
+      [code, spotId]
+    );
+    res.json({ isFavorite: rows.length > 0 });
+  } catch (e) {
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
 // 📍 Einchecken am Treffpunkt
 app.post('/api/spotcache/checkin', async (req, res) => {
   const { id, code, lat, lng } = req.body;
@@ -1976,6 +2070,46 @@ app.post('/api/spotcache/checkin', async (req, res) => {
       );
 
       return res.json({ success: true, bothCheckedIn: true, message: 'Ihr habt euch gefunden!' });
+    }
+
+    // ⭐ Favoriten benachrichtigen wenn jemand an diesem Spot eincheckt.
+    // Wir holen alle Nutzer die diesen Spot als Favorit gespeichert haben,
+    // ausgenommen die beiden die gerade am Treffen beteiligt sind –
+    // die wissen bereits dass jemand da ist.
+    try {
+      const spotData = await pool.query(
+        `SELECT name FROM user_spots WHERE id = $1`, [inv.spot_id]
+      );
+      const spotName = spotData.rows[0]?.name || 'Spot';
+
+      const favorites = await pool.query(
+        `SELECT code FROM spot_favorites
+         WHERE spot_id = $1
+           AND code != $2
+           AND code != $3`,
+        [inv.spot_id, inv.from_code, inv.to_code]
+      );
+
+      // Für jeden Favoriten eine stille Benachrichtigung schicken
+      for (const fav of favorites.rows) {
+        await pool.query(
+          `INSERT INTO offline_messages
+             (recipient, sender_code, sender_name, message, spot_type)
+           VALUES ($1, $2, $3, $4, 'favorite_checkin')`,
+          [
+            fav.code,
+            code,
+            'SpotMe',
+            `⭐ Jemand ist gerade bei "${spotName}" eingecheckt!`
+          ]
+        );
+      }
+      if (favorites.rows.length > 0) {
+        console.log(`⭐ ${favorites.rows.length} Favoriten über Check-in bei Spot ${inv.spot_id} benachrichtigt`);
+      }
+    } catch (e) {
+      // Benachrichtigungs-Fehler soll den Check-in nicht blockieren
+      console.error('Favorites notify error:', e.message);
     }
 
     res.json({ success: true, bothCheckedIn: false });
