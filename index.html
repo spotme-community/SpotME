@@ -1323,14 +1323,7 @@ async function loadInvitesIntoDrawer(body) {
             <div class="sc-detail">
               ${formatDateTime(timeStart)} – ${formatDateTime(timeEnd)}
             </div>
-            ${!isSender
-              ? `<div class="sc-detail" style="font-size:0.72rem;color:var(--muted2);">
-                   📨 Von: <strong>${esc(inv.from_name || inv.from_code)}</strong>
-                 </div>`
-              : `<div class="sc-detail" style="font-size:0.72rem;color:var(--muted2);">
-                   📤 An: <strong>${esc(inv.to_name || inv.to_code)}</strong>
-                 </div>`
-            }
+            ${!isSender ? `<div class="sc-detail">📨 Von: ${esc(inv.from_name || inv.from_code)}</div>` : ''}
           </div>
         </div>
 
@@ -2351,8 +2344,14 @@ async function renderMeetingWeather(invId, lat, lng, timeStart) {
   if (!w || !w.hourly) { el.style.display = 'none'; return; }
 
   const meetingISO = new Date(timeStart).toISOString().slice(0, 13);
-  const centerIdx  = w.hourly.time.findIndex(t => t.startsWith(meetingISO));
-  if (centerIdx < 0) { el.innerHTML = '<span style="opacity:0.5;">Vorhersage nicht verfügbar</span>'; return; }
+  let centerIdx    = w.hourly.time.findIndex(t => t.startsWith(meetingISO));
+
+  // Fallback: Treffen außerhalb Vorhersage-Fenster → aktuelle Stunde
+  if (centerIdx < 0) {
+    const nowISO = new Date().toISOString().slice(0, 13);
+    centerIdx    = w.hourly.time.findIndex(t => t.startsWith(nowISO));
+  }
+  if (centerIdx < 0) { el.style.display = 'none'; return; }
 
   const startIdx = Math.max(0, centerIdx - 1);
   const hours    = w.hourly.time.slice(startIdx, centerIdx + 5);
@@ -2377,7 +2376,6 @@ async function renderMeetingWeather(invId, lat, lng, timeStart) {
     }).join('')}
   </div>`;
 }
-
 // Storniert eine Einladung nach Bestätigung durch den Nutzer.
 // Nach dem Stornieren wird das Modal neu geladen damit die Karte verschwindet.
 async function cancelInvite(id) {
