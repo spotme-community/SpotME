@@ -605,6 +605,13 @@
       📷 Foto hinzufügen
     </button>
     <input type="file" id="spotPhotoInput" accept="image/*" style="display:none">
+    <!-- Status-Hinweis für Bild-Moderation – wird von openSpotEdit() befüllt -->
+    <div id="spotPhotoHint"
+         style="display:none;font-size:0.7rem;color:var(--muted);
+                font-family:'Space Mono',monospace;margin-bottom:0.5rem;
+                padding:0.3rem 0.5rem;background:var(--card);
+                border-radius:8px;border:1px solid var(--bord);">
+    </div>
     <div class="modal-actions">
       <button class="btn-ghost" id="spotModalCancel">Abbrechen</button>
       <button class="btn-primary" id="spotModalSave">💾 Speichern</button>
@@ -781,16 +788,36 @@ function openSpotEdit(s) {
   document.getElementById('spotDesc').value = s.description || '';
   document.getElementById('spotWish').value = s.wishTag || '';
 
-  // Bestehendes Bild zeigen (approved)
+  // Bestehendes Bild anzeigen – jetzt auch wenn es noch 'pending' ist.
+  // Vorher wurde pending-Bild als null zurückgegeben und hier nicht gezeigt,
+  // was dazu führte dass beim Speichern image=null mitgeschickt wurde.
+  // Jetzt speichern wir das bestehende Bild in spotPhotoData damit es
+  // beim Speichern erhalten bleibt wenn kein neues Bild gewählt wird.
   spotPhotoData = null;
   if (s.image) {
-    spotPhotoData = s.image;
+    spotPhotoData = s.image; // bestehend Bild merken – wird beim PUT mitgeschickt
     document.getElementById('spotPhotoImg').src = s.image;
     document.getElementById('spotPhotoPreview').style.display = 'block';
     document.getElementById('spotPhotoBtn').style.display = 'none';
+
+    // Status-Hinweis: unterscheide zwischen approved und pending
+    const hint = document.getElementById('spotPhotoHint');
+    if (hint) {
+      if (s.image_status === 'pending') {
+        hint.textContent = '⏳ Bild wird noch moderiert';
+        hint.style.display = 'block';
+      } else if (s.image_status === 'approved') {
+        hint.textContent = '✅ Bild freigegeben';
+        hint.style.display = 'block';
+      } else {
+        hint.style.display = 'none';
+      }
+    }
   } else {
     document.getElementById('spotPhotoPreview').style.display = 'none';
     document.getElementById('spotPhotoBtn').style.display = 'block';
+    const hint = document.getElementById('spotPhotoHint');
+    if (hint) hint.style.display = 'none';
   }
   document.getElementById('spotPhotoInput').value = '';
   document.getElementById('spotModal').classList.add('show');
@@ -1008,6 +1035,10 @@ async function saveSpot() {
 
   if (editSpotId) {
     // ── BEARBEITEN ──
+    // spotPhotoData enthält entweder:
+    //   - das bestehende Bild (pending oder approved) → mitschicken damit es bleibt
+    //   - ein neues Bild das der Nutzer gerade gewählt hat → mitschicken
+    //   - null wenn das Bild manuell entfernt wurde → null mitschicken
     closeModals();
     try {
       await fetch(`${API}/userspots/${editSpotId}`, {
