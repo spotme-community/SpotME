@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// SPOTME SERVER v4.4 – PostgreSQL (inkl. SpotCache & Messenger Invites)
+// SPOTME SERVER v4.8 – PostgreSQL (inkl. SpotCache & Messenger Invites)
 //
 // Features:
 //   • 24h Offline-Sichtbarkeit  → visible_until Timestamp pro Profil
@@ -275,7 +275,7 @@ await pool.query(`
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS description TEXT`).catch(() => {});
     await pool.query(`ALTER TABLE user_spots ADD COLUMN IF NOT EXISTS image_status TEXT DEFAULT 'pending'`).catch(() => {});
-    console.log('✅ v4.6 – Alle Spalten bereit (inkl. SpotCache)');
+    console.log('✅ v4.8 – Alle Spalten bereit (inkl. SpotCache)');
   } catch (e) {
     console.log('ℹ️ Spalten existieren bereits oder konnten nicht angelegt werden');
   }
@@ -1631,14 +1631,23 @@ app.get('/api/userspots/all', async (req, res) => {
 });
 
 // 🟠 Eigene Spots abrufen
+// Der Eigentümer bekommt immer sein Bild zurück – unabhängig vom image_status.
+// Das ist wichtig damit das Frontend beim Bearbeiten nicht null mitschickt
+// und damit das Bild einer approved-Spot-Bearbeitung nicht verloren geht.
+// image_status wird mitgeliefert damit das Frontend einen passenden Hinweis
+// anzeigen kann: "⏳ Bild wird moderiert" vs. "✅ Bild freigegeben"
 app.get('/api/userspots/:code', async (req, res) => {
   const { code } = req.params;
   try {
     const { rows } = await pool.query(
       `SELECT id, lat, lng, name, description, wish_tag AS "wishTag",
-              CASE WHEN image_status = 'approved' THEN image ELSE NULL END AS image,
+              image,           -- immer zurückgeben, nicht nach Status filtern
+              image_status,    -- Frontend kann den Status selbst anzeigen
+              active,
               created_at
-       FROM user_spots WHERE code = $1 ORDER BY created_at DESC`,
+       FROM user_spots
+       WHERE code = $1
+       ORDER BY created_at DESC`,
       [code]
     );
     res.json(rows);
@@ -1648,7 +1657,138 @@ app.get('/api/userspots/:code', async (req, res) => {
   }
 });
 
-// 🟠 Spot löschen
+// ══════════════════════════════════════════════════════════════════════════════
+// ÖFFENTLICHE CHECK-INS – Favoriten-Spots ohne Einladungspflicht
+// Nur Nutzer mit aktivem Profil können öffentliche Check-ins ankündigen.
+// Die 4-Stunden-Regel wird serverseitig geprüft – das Frontend könnte
+// manipuliert werden, der Server nicht.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// 📍 Öffentlichen Check-in ankündigen
+app.post('/api/checkins/public', async (req, res) => {
+  const { code, spot_id, checkin_at, note } = req.body;
+
+  if (!code || !spot_id || !checkin_at) {
+    return res.status(400).json({ error: 'code, spot_id und checkin_at sind Pflicht' });
+  }
+
+  // 4-Stunden-Regel: Check-in muss in der Zukunft liegen
+  const fourHoursFromNow = Date.now() + (4 * 60 * 60 * 1000);
+  if (checkin_at < fourHoursFromNow) {
+    return res.status(400).json({ error: 'Check-in muss mindestens 4 Stunden in der Zukunft liegen' });
+  }
+
+  try {
+    // Aktives Profil prüfen – nur wer ein Profil hat darf einchecken
+    const profile = await pool.query(
+      `SELECT name FROM profiles WHERE code = $1 AND spot = 'caching'`,
+      [code]
+    );
+    if (!profile.rows.length) {
+      return res.status(403).json({ error: 'Kein aktives Profil gefunden' });
+    }
+
+    // Spot muss als Favorit gespeichert sein
+    const fav = await pool.query(
+      `SELECT 1 FROM spot_favorites WHERE code = $1 AND spot_id = $2`,
+      [code, spot_id]
+    );
+    if (!fav.rows.length) {
+      return res.status(403).json({ error: 'Spot ist nicht in deinen Favoriten' });
+    }
+
+    // Check-in ankündigen
+    const result = await pool.query(
+      `INSERT INTO spot_checkins_public (spot_id, code, checkin_at, note, status, created_at)
+       VALUES ($1, $2, $3, $4, 'planned', $5)
+       RETURNING id`,
+      [spot_id, code, checkin_at, note || null, Date.now()]
+    );
+
+    // Alle anderen Favoriten dieses Spots benachrichtigen
+    const spotData = await pool.query(
+      `SELECT name FROM user_spots WHERE id = $1`, [spot_id]
+    );
+    const spotName    = spotData.rows[0]?.name || 'Spot';
+    const profileName = decrypt(profile.rows[0].name) || code;
+    const timeStr     = new Date(checkin_at).toLocaleString('de-DE', {
+      day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+
+    const otherFavs = await pool.query(
+      `SELECT code FROM spot_favorites WHERE spot_id = $1 AND code != $2`,
+      [spot_id, code]
+    );
+    for (const fav of otherFavs.rows) {
+      await pool.query(
+        `INSERT INTO offline_messages
+           (recipient, sender_code, sender_name, message, spot_type)
+         VALUES ($1, $2, $3, $4, 'public_checkin')`,
+        [
+          fav.code,
+          code,
+          profileName,
+          `📍 ${profileName} ist am ${timeStr} bei "${spotName}"`
+        ]
+      );
+    }
+
+    console.log(`📍 Öffentlicher Check-in: ${code} @ Spot ${spot_id} um ${timeStr}`);
+    res.json({ success: true, id: result.rows[0].id });
+
+  } catch (e) {
+    console.error('POST /api/checkins/public:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// 📍 Öffentliche Check-ins für einen Spot abrufen
+// Zeigt alle geplanten Check-ins aller Favoriten – mit Profilnamen.
+// Nur aktive (noch nicht abgelaufene) Check-ins werden angezeigt.
+app.get('/api/checkins/public/:spotId', async (req, res) => {
+  const { spotId } = req.params;
+  const now = Date.now();
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.code, c.checkin_at, c.note, c.status,
+              p.name AS profile_name_enc
+       FROM spot_checkins_public c
+       LEFT JOIN profiles p ON p.code = c.code AND p.spot = 'caching'
+       WHERE c.spot_id = $1
+         AND c.checkin_at > $2
+         AND c.status = 'planned'
+       ORDER BY c.checkin_at ASC`,
+      [spotId, now]
+    );
+    res.json(rows.map(r => ({
+      ...r,
+      profile_name:     r.profile_name_enc ? decrypt(r.profile_name_enc) : null,
+      profile_name_enc: undefined,
+    })));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 📍 Eigenen öffentlichen Check-in stornieren
+app.delete('/api/checkins/public/:id', async (req, res) => {
+  const { id }   = req.params;
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'code erforderlich' });
+  try {
+    await pool.query(
+      `UPDATE spot_checkins_public SET status = 'cancelled'
+       WHERE id = $1 AND code = $2`,
+      [id, code]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 🟠 Spot bearbeiten
 app.put('/api/userspots/:id', async (req, res) => {
   const { id } = req.params;
   const { code, name, description, wishTag, image } = req.body;
@@ -1661,16 +1801,26 @@ app.put('/api/userspots/:id', async (req, res) => {
     if (!check.rows.length) return res.status(404).json({ error: 'Nicht gefunden' });
     if (check.rows[0].code !== code) return res.status(403).json({ error: 'Keine Berechtigung' });
 
-    // Neues Bild → pending, kein neues Bild → Status beibehalten
     if (image) {
+      // Neues Bild mitgeschickt → speichern und auf 'pending' setzen
+      // Das neue Bild muss vom Admin erneut freigegeben werden
       await pool.query(
-        `UPDATE user_spots SET name=$1, description=$2, wish_tag=$3, image=$4, image_status='pending' WHERE id=$5`,
-        [name, description||null, wishTag, image, id]
+        `UPDATE user_spots
+         SET name=$1, description=$2, wish_tag=$3, image=$4, image_status='pending'
+         WHERE id=$5`,
+        [name, description || null, wishTag, image, id]
       );
     } else {
+      // Kein neues Bild → name/description/wishTag aktualisieren,
+      // aber image und image_status NICHT anfassen.
+      // Das ist der Schutz vor dem "versehentlichen Löschen" –
+      // wenn das Frontend beim Bearbeiten image=null schickt weil es
+      // das pending-Bild nicht kennt, bleibt das Bild trotzdem erhalten.
       await pool.query(
-        `UPDATE user_spots SET name=$1, description=$2, wish_tag=$3 WHERE id=$4`,
-        [name, description||null, wishTag, id]
+        `UPDATE user_spots
+         SET name=$1, description=$2, wish_tag=$3
+         WHERE id=$4`,
+        [name, description || null, wishTag, id]
       );
     }
     res.json({ success: true });
@@ -1929,6 +2079,100 @@ app.patch('/api/spotcache/invite/:id/cancel', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// FAVORITEN – Öffentliche Spot-Kategorien ohne Einladungspflicht
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ⭐ Favorit hinzufügen
+app.post('/api/favorites', async (req, res) => {
+  const { code, spot_id } = req.body;
+  if (!code || !spot_id) return res.status(400).json({ error: 'code und spot_id erforderlich' });
+  try {
+    await pool.query(
+      `INSERT INTO spot_favorites (code, spot_id, created_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (code, spot_id) DO NOTHING`,
+      [code, spot_id, Date.now()]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('POST /api/favorites:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// ⭐ Favorit entfernen
+app.delete('/api/favorites/:spotId', async (req, res) => {
+  const { spotId } = req.params;
+  const { code }   = req.body;
+  if (!code) return res.status(400).json({ error: 'code erforderlich' });
+  try {
+    await pool.query(
+      `DELETE FROM spot_favorites WHERE code = $1 AND spot_id = $2`,
+      [code, spotId]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('DELETE /api/favorites:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// ⭐ Alle Favoriten eines Nutzers abrufen – mit Spot-Details und letztem Check-in
+app.get('/api/favorites/:code', async (req, res) => {
+  const { code } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT f.spot_id,
+              u.name      AS spot_name,
+              u.lat, u.lng,
+              u.wish_tag  AS "wishTag",
+              u.code      AS owner_code,
+              -- Letzter Check-in an diesem Spot (aus verifications)
+              v.created_at AS last_checkin,
+              v.from_code  AS last_checkin_code,
+              p.name       AS last_checkin_name_enc
+       FROM spot_favorites f
+       JOIN user_spots u ON u.id = f.spot_id
+       -- Neuester Check-in pro Spot – LATERAL macht das effizient
+       LEFT JOIN LATERAL (
+         SELECT from_code, created_at
+         FROM verifications
+         WHERE to_code = u.code AND to_spot = 'caching' AND type = 'personal'
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) v ON true
+       LEFT JOIN profiles p ON p.code = v.from_code AND p.spot = 'caching'
+       WHERE f.code = $1
+         AND u.active = true
+       ORDER BY f.created_at DESC`,
+      [code]
+    );
+    res.json(rows.map(r => ({
+      ...r,
+      last_checkin_name: r.last_checkin_name_enc ? decrypt(r.last_checkin_name_enc) : null,
+      last_checkin_name_enc: undefined,
+    })));
+  } catch (e) {
+    console.error('GET /api/favorites:', e.message);
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
+// ⭐ Prüfen ob ein Spot bereits als Favorit gespeichert ist (für den ⭐-Button)
+app.get('/api/favorites/:code/:spotId', async (req, res) => {
+  const { code, spotId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM spot_favorites WHERE code = $1 AND spot_id = $2`,
+      [code, spotId]
+    );
+    res.json({ isFavorite: rows.length > 0 });
+  } catch (e) {
+    res.status(500).json({ error: 'Datenbankfehler' });
+  }
+});
+
 // 📍 Einchecken am Treffpunkt
 app.post('/api/spotcache/checkin', async (req, res) => {
   const { id, code, lat, lng } = req.body;
@@ -1976,6 +2220,46 @@ app.post('/api/spotcache/checkin', async (req, res) => {
       );
 
       return res.json({ success: true, bothCheckedIn: true, message: 'Ihr habt euch gefunden!' });
+    }
+
+    // ⭐ Favoriten benachrichtigen wenn jemand an diesem Spot eincheckt.
+    // Wir holen alle Nutzer die diesen Spot als Favorit gespeichert haben,
+    // ausgenommen die beiden die gerade am Treffen beteiligt sind –
+    // die wissen bereits dass jemand da ist.
+    try {
+      const spotData = await pool.query(
+        `SELECT name FROM user_spots WHERE id = $1`, [inv.spot_id]
+      );
+      const spotName = spotData.rows[0]?.name || 'Spot';
+
+      const favorites = await pool.query(
+        `SELECT code FROM spot_favorites
+         WHERE spot_id = $1
+           AND code != $2
+           AND code != $3`,
+        [inv.spot_id, inv.from_code, inv.to_code]
+      );
+
+      // Für jeden Favoriten eine stille Benachrichtigung schicken
+      for (const fav of favorites.rows) {
+        await pool.query(
+          `INSERT INTO offline_messages
+             (recipient, sender_code, sender_name, message, spot_type)
+           VALUES ($1, $2, $3, $4, 'favorite_checkin')`,
+          [
+            fav.code,
+            code,
+            'SpotMe',
+            `⭐ Jemand ist gerade bei "${spotName}" eingecheckt!`
+          ]
+        );
+      }
+      if (favorites.rows.length > 0) {
+        console.log(`⭐ ${favorites.rows.length} Favoriten über Check-in bei Spot ${inv.spot_id} benachrichtigt`);
+      }
+    } catch (e) {
+      // Benachrichtigungs-Fehler soll den Check-in nicht blockieren
+      console.error('Favorites notify error:', e.message);
     }
 
     res.json({ success: true, bothCheckedIn: false });
