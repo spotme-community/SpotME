@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SpotMe · Spot erstellen</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow-y: auto;
+      padding: 1rem;
+      padding-bottom: 2rem;
+    }
+
+    :root {
+      --bg: #0a0d12;
+      --sur: #0f1318;
+      --glass: rgba(15, 19, 24, 0.88);
+      --glass2: rgba(20, 26, 36, 0.92);
+      --card: #141a22;
+      --card2: #1a2230;
+      --bord: rgba(255, 255, 255, 0.07);
+      --bord2: rgba(255, 255, 255, 0.13);
+      --acc: #f59e0b;
+      --acc-dim: rgba(245, 158, 11, 0.12);
+      --acc-glow: rgba(245, 158, 11, 0.25);
+      --cyan: #22d3ee;
+      --green: #10b981;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --muted2: #94a3b8;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 1.2rem;
+      padding-top: env(safe-area-inset-top);
+    }
+    .logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--acc);
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .logo-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--acc);
+      box-shadow: 0 0 10px var(--acc);
+      animation: pulse-dot 2s ease infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+    .back-link {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-decoration: none;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bord2);
+      border-radius: 20px;
+      padding: 0.3rem 0.8rem;
+    }
+
+    /* Karte */
+    .map-card {
+      background: var(--card);
+      border: 1px solid var(--bord);
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 1.2rem;
+    }
+    #map {
+      width: 100%;
+      height: 280px;
+      filter: brightness(0.82);
+    }
+    .map-note {
+      font-size: 0.7rem;
+      color: var(--muted);
+      padding: 0.4rem 0.75rem;
+      background: var(--sur);
+      border-top: 1px solid var(--bord);
+      text-align: center;
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* Formular */
+    .form-section {
+      background: var(--card);
+      border: 1px solid var(--bord);
+      border-radius: 20px;
+      padding: 1rem 1rem 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--acc);
+      text-transform: uppercase;
+      margin-bottom: 0.8rem;
+    }
+    .input-field {
+      width: 100%;
+      background: var(--sur);
+      border: 1px solid var(--bord2);
+      border-radius: 14px;
+      padding: 0.75rem 1rem;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      margin-bottom: 0.8rem;
+      outline: none;
+    }
+    .input-field:focus {
+      border-color: rgba(245, 158, 11, 0.5);
+    }
+    textarea.input-field {
+      resize: vertical;
+      min-height: 80px;
+    }
+    label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 0.3rem;
+    }
+    .select-field {
+      width: 100%;
+      background: var(--sur);
+      border: 1px solid var(--bord2);
+      border-radius: 14px;
+      padding: 0.75rem 1rem;
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.9rem;
+      margin-bottom: 0.8rem;
+      cursor: pointer;
+    }
+
+    /* Pill / Button Gruppen */
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+    }
+    .pill {
+      flex: 1 0 auto;
+      background: var(--sur);
+      border: 1px solid var(--bord2);
+      border-radius: 40px;
+      padding: 0.55rem 0.8rem;
+      text-align: center;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted2);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .pill.selected {
+      background: var(--acc-dim);
+      border-color: var(--acc-glow);
+      color: var(--acc);
+    }
+    .intimity-high.selected { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444; }
+    .intimity-medium.selected { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b; }
+    .intimity-low.selected { background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #10b981; }
+    .crowd-high.selected { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.4); color: #ef4444; }
+    .crowd-medium.selected { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b; }
+    .crowd-low.selected { background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4); color: #10b981; }
+
+    .save-btn {
+      width: 100%;
+      background: var(--acc);
+      border: none;
+      border-radius: 16px;
+      padding: 0.9rem;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #0a0d12;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      transition: transform 0.1s;
+      margin-top: 0.5rem;
+    }
+    .save-btn:active {
+      transform: scale(0.97);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--glass2);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--bord2);
+      border-radius: 100px;
+      padding: 0.5rem 1.2rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      z-index: 900;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s;
+      white-space: nowrap;
+      color: var(--text);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      SPOT<span style="color:var(--text);font-weight:300;">ME</span>
+    </div>
+    <a href="#" class="back-link" onclick="history.back(); return false;">← Zurück</a>
+  </div>
+
+  <!-- Kartenabschnitt -->
+  <div class="map-card">
+    <div id="map"></div>
+    <div class="map-note">📍 Tippe auf die Karte, um den Standort zu setzen</div>
+  </div>
+
+  <!-- Formular -->
+  <div class="form-section">
+    <div class="section-title">📍 BASIS</div>
+    <input type="text" id="spotName" class="input-field" placeholder="Name des Gebiets (z.B. Café Central)" maxlength="60">
+    <select id="areaType" class="select-field">
+      <option value="" disabled selected>Art des Gebiets wählen</option>
+      <option value="Bahnhof">🚉 Bahnhof</option>
+      <option value="Club">🎉 Club</option>
+      <option value="Einkaufsviertel">🛍️ Einkaufsviertel</option>
+      <option value="Filmtheater">🎬 Filmtheater</option>
+      <option value="Fitnesscenter">💪 Fitnesscenter</option>
+      <option value="Industriepark">🏭 Industriepark</option>
+      <option value="Internetcafé">💻 Internetsafé</option>
+      <option value="Naturschutzgebiet">🌿 Naturschutzgebiet</option>
+      <option value="Park">🌳 Park</option>
+      <option value="Rastplatz">🛣️ Rastplatz</option>
+      <option value="Restaurant">🍽️ Restaurant</option>
+      <option value="Sauna">🧖 Sauna</option>
+    </select>
+  </div>
+
+  <div class="form-section">
+    <div class="section-title">⏰ TAGESZEIT</div>
+    <div class="pill-group" id="timeGroup">
+      <div class="pill" data-time="fullDay">Ganzen Tag</div>
+      <div class="pill" data-time="morning">Morgen</div>
+      <div class="pill" data-time="afternoon">Nachmittag</div>
+      <div class="pill" data-time="night">Nacht</div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="section-title">👥 ZUSTROM</div>
+    <div class="pill-group" id="crowdGroup">
+      <div class="pill crowd-high" data-crowd="high">Hoch</div>
+      <div class="pill crowd-medium" data-crowd="medium">Mittel</div>
+      <div class="pill crowd-low" data-crowd="low">Niedrig</div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="section-title">🕯️ INTIMITÄT</div>
+    <div class="pill-group" id="intimityGroup">
+      <div class="pill intimity-high" data-intimity="high">Hoch</div>
+      <div class="pill intimity-medium" data-intimity="medium">Mittel</div>
+      <div class="pill intimity-low" data-intimity="low">Niedrig</div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <div class="section-title">📝 BESCHREIBUNG (optional)</div>
+    <textarea id="description" class="input-field" placeholder="Was macht diesen Spot besonders? …" maxlength="250"></textarea>
+  </div>
+
+  <button class="save-btn" id="saveBtn">✨ Spot speichern</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
+<script>
+  'use strict';
+
+  // ---------- Karten- und Marker-Logik ----------
+  let map;
+  let currentMarker = null;
+  let currentCoords = { lat: 39.4697, lng: -0.3775 }; // Default Gandia
+  let userPos = null;
+
+  function initMap() {
+    map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/bright',
+      center: [currentCoords.lng, currentCoords.lat],
+      zoom: 13,
+      attributionControl: false
+    });
+
+    map.on('load', () => {
+      addMarker(currentCoords.lat, currentCoords.lng);
+    });
+
+    map.on('click', (e) => {
+      const { lat, lng } = e.lngLat;
+      currentCoords = { lat, lng };
+      addMarker(lat, lng);
+    });
+
+    // Benutzerstandort anfordern und Marker dorthin setzen
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          currentCoords = userPos;
+          map.setCenter([userPos.lng, userPos.lat]);
+          addMarker(userPos.lat, userPos.lng);
+        },
+        () => { /* Fallback Default */ },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }
+
+  function addMarker(lat, lng) {
+    if (currentMarker) currentMarker.remove();
+    const el = document.createElement('div');
+    el.style.cssText = 'width:20px;height:20px;background:#f59e0b;border-radius:50%;border:2.5px solid white;box-shadow:0 0 12px rgba(245,158,11,0.6);cursor:pointer;';
+    currentMarker = new maplibregl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .addTo(map);
+  }
+
+  // ---------- UI Pills Interaktion ----------
+  function setupPills() {
+    // Tageszeit
+    const timePills = document.querySelectorAll('#timeGroup .pill');
+    timePills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        timePills.forEach(p => p.classList.remove('selected'));
+        pill.classList.add('selected');
+      });
+    });
+
+    // Zustrom
+    const crowdPills = document.querySelectorAll('#crowdGroup .pill');
+    crowdPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        crowdPills.forEach(p => p.classList.remove('selected'));
+        pill.classList.add('selected');
+      });
+    });
+
+    // Intimität
+    const intimityPills = document.querySelectorAll('#intimityGroup .pill');
+    intimityPills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        intimityPills.forEach(p => p.classList.remove('selected'));
+        pill.classList.add('selected');
+      });
+    });
+  }
+
+  // ---------- Hilfsfunktionen ----------
+  function getSelectedTime() {
+    const selected = document.querySelector('#timeGroup .pill.selected');
+    return selected ? selected.dataset.time : null;
+  }
+
+  function getSelectedCrowd() {
+    const selected = document.querySelector('#crowdGroup .pill.selected');
+    return selected ? selected.dataset.crowd : null;
+  }
+
+  function getSelectedIntimity() {
+    const selected = document.querySelector('#intimityGroup .pill.selected');
+    return selected ? selected.dataset.intimity : null;
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+
+  function buildSpotData() {
+    const name = document.getElementById('spotName').value.trim();
+    if (!name) {
+      showToast('⚠️ Bitte einen Namen für das Gebiet eingeben');
+      return null;
+    }
+    const areaType = document.getElementById('areaType').value;
+    if (!areaType) {
+      showToast('⚠️ Bitte die Art des Gebiets auswählen');
+      return null;
+    }
+    const timePref = getSelectedTime();
+    const crowd = getSelectedCrowd();
+    const intimity = getSelectedIntimity();
+    const description = document.getElementById('description').value.trim();
+
+    // Beispiel-Datenstruktur – später an dein Backend anpassen
+    return {
+      name,
+      areaType,
+      timePreference: timePref,
+      crowdLevel: crowd,
+      intimacyLevel: intimity,
+      description: description || null,
+      location: {
+        lat: currentCoords.lat,
+        lng: currentCoords.lng
+      },
+      // Optional: Stadt/Region über Reverse Geocoding (hier nicht implementiert)
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  function saveSpot() {
+    const spot = buildSpotData();
+    if (!spot) return;
+
+    // Hier könnte ein API-Request an dein Backend gehen (POST /api/userspots)
+    console.log('📦 Spot-Daten:', spot);
+    showToast('✅ Spot gespeichert (Demo – siehe Konsole)');
+
+    // In einer echten Integration würdest du jetzt z.B. fetch() aufrufen
+    // fetch('/api/userspots', { method: 'POST', headers:..., body: JSON.stringify(spot) })
+  }
+
+  // ---------- Initialisierung ----------
+  document.addEventListener('DOMContentLoaded', () => {
+    initMap();
+    setupPills();
+    document.getElementById('saveBtn').addEventListener('click', saveSpot);
+  });
+</script>
+</body>
+</html>
