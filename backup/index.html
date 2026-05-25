@@ -2,9 +2,6 @@
 <html lang="de">
 <head>
 
-<!-- Eruda – Mobile Console (nur für Debugging)
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script> -->
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
@@ -605,6 +602,13 @@
       📷 Foto hinzufügen
     </button>
     <input type="file" id="spotPhotoInput" accept="image/*" style="display:none">
+    <!-- Status-Hinweis für Bild-Moderation – wird von openSpotEdit() befüllt -->
+    <div id="spotPhotoHint"
+         style="display:none;font-size:0.7rem;color:var(--muted);
+                font-family:'Space Mono',monospace;margin-bottom:0.5rem;
+                padding:0.3rem 0.5rem;background:var(--card);
+                border-radius:8px;border:1px solid var(--bord);">
+    </div>
     <div class="modal-actions">
       <button class="btn-ghost" id="spotModalCancel">Abbrechen</button>
       <button class="btn-primary" id="spotModalSave">💾 Speichern</button>
@@ -781,16 +785,36 @@ function openSpotEdit(s) {
   document.getElementById('spotDesc').value = s.description || '';
   document.getElementById('spotWish').value = s.wishTag || '';
 
-  // Bestehendes Bild zeigen (approved)
+  // Bestehendes Bild anzeigen – jetzt auch wenn es noch 'pending' ist.
+  // Vorher wurde pending-Bild als null zurückgegeben und hier nicht gezeigt,
+  // was dazu führte dass beim Speichern image=null mitgeschickt wurde.
+  // Jetzt speichern wir das bestehende Bild in spotPhotoData damit es
+  // beim Speichern erhalten bleibt wenn kein neues Bild gewählt wird.
   spotPhotoData = null;
   if (s.image) {
-    spotPhotoData = s.image;
+    spotPhotoData = s.image; // bestehend Bild merken – wird beim PUT mitgeschickt
     document.getElementById('spotPhotoImg').src = s.image;
     document.getElementById('spotPhotoPreview').style.display = 'block';
     document.getElementById('spotPhotoBtn').style.display = 'none';
+
+    // Status-Hinweis: unterscheide zwischen approved und pending
+    const hint = document.getElementById('spotPhotoHint');
+    if (hint) {
+      if (s.image_status === 'pending') {
+        hint.textContent = '⏳ Bild wird noch moderiert';
+        hint.style.display = 'block';
+      } else if (s.image_status === 'approved') {
+        hint.textContent = '✅ Bild freigegeben';
+        hint.style.display = 'block';
+      } else {
+        hint.style.display = 'none';
+      }
+    }
   } else {
     document.getElementById('spotPhotoPreview').style.display = 'none';
     document.getElementById('spotPhotoBtn').style.display = 'block';
+    const hint = document.getElementById('spotPhotoHint');
+    if (hint) hint.style.display = 'none';
   }
   document.getElementById('spotPhotoInput').value = '';
   document.getElementById('spotModal').classList.add('show');
@@ -1008,6 +1032,10 @@ async function saveSpot() {
 
   if (editSpotId) {
     // ── BEARBEITEN ──
+    // spotPhotoData enthält entweder:
+    //   - das bestehende Bild (pending oder approved) → mitschicken damit es bleibt
+    //   - ein neues Bild das der Nutzer gerade gewählt hat → mitschicken
+    //   - null wenn das Bild manuell entfernt wurde → null mitschicken
     closeModals();
     try {
       await fetch(`${API}/userspots/${editSpotId}`, {
@@ -2116,28 +2144,88 @@ async function loadFavoritesIntoDrawer(body) {
     return;
   }
 
+  // Für jeden Favoriten die öffentlichen Check-ins parallel laden.
+  // Promise.all startet alle Anfragen gleichzeitig – viel schneller als
+  // sie nacheinander abzuarbeiten.
+  const checkinsBySpot = {};
+  await Promise.all(favs.map(async f => {
+    try {
+      const r = await fetch(`${API}/checkins/public/${f.spot_id}`);
+      if (r.ok) checkinsBySpot[f.spot_id] = await r.json();
+    } catch {}
+  }));
+
   body.innerHTML = favs.map(f => {
     const lastCheckin = f.last_checkin
-      ? `⭐ Letzter Check-in: ${f.last_checkin_name || f.last_checkin_code || '?'} · ${formatDateTime(+f.last_checkin)}`
-      : '– Noch kein Check-in';
+      ? `Letzter Check-in: ${f.last_checkin_name || f.last_checkin_code || '?'} · ${formatDateTime(+f.last_checkin)}`
+      : 'Noch kein Check-in';
 
-    return `<div class="fav-card">
-      <div class="fav-icon">📍</div>
-      <div class="fav-info">
-        <div class="fav-name">${esc(f.spot_name || 'Spot')}</div>
-        <div class="fav-meta">${esc(f.wishTag || '')}</div>
-        <div class="fav-checkin">${lastCheckin}</div>
+    // Geplante öffentliche Check-ins für diesen Spot
+    const upcoming = checkinsBySpot[f.spot_id] || [];
+
+    // Jede geplante Check-in-Karte darstellen
+    const upcomingHtml = upcoming.length
+      ? `<div style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.3rem;">
+           ${upcoming.map(c => `
+             <div style="display:flex;align-items:center;gap:0.5rem;
+                         padding:0.35rem 0.5rem;background:rgba(16,185,129,0.08);
+                         border:1px solid rgba(16,185,129,0.2);border-radius:8px;">
+               <span style="font-size:0.8rem;">📍</span>
+               <div style="flex:1;min-width:0;">
+                 <div style="font-size:0.72rem;font-weight:600;color:#10b981;">
+                   ${esc(c.profile_name || c.code)}
+                 </div>
+                 <div style="font-size:0.65rem;color:var(--muted);
+                             font-family:'Space Mono',monospace;">
+                   ${formatDateTime(c.checkin_at)}
+                   ${c.note ? `· ${esc(c.note)}` : ''}
+                 </div>
+               </div>
+               <!-- Chat-Button direkt aus dem Favoriten-Drawer -->
+               <button class="sc-btn success" style="padding:0.3rem 0.5rem;font-size:0.75rem;"
+                       data-chat-fav="${c.code}"
+                       data-chatname-fav="${esc(c.profile_name || c.code)}">💬</button>
+             </div>`).join('')}
+         </div>`
+      : '';
+
+    return `<div class="fav-card" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div class="fav-icon">📍</div>
+        <div class="fav-info" style="flex:1;min-width:0;">
+          <div class="fav-name">${esc(f.spot_name || 'Spot')}</div>
+          <div class="fav-meta">${esc(f.wishTag || '')}</div>
+          <div class="fav-checkin">${lastCheckin}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.35rem;">
+          <button class="sc-btn navigate" style="padding:0.5rem 0.6rem;"
+                  data-fav-lat="${f.lat}" data-fav-lng="${f.lng}">🧭</button>
+          <button class="sc-btn" style="padding:0.5rem 0.6rem;font-size:0.7rem;
+                  background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:var(--red);"
+                  data-unfav="${f.spot_id}">✕</button>
+        </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:0.35rem;">
-        <button class="sc-btn navigate" style="padding:0.5rem 0.6rem;"
-                data-fav-lat="${f.lat}" data-fav-lng="${f.lng}">🧭</button>
-        <button class="sc-btn" style="padding:0.5rem 0.6rem;font-size:0.7rem;
-                background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:var(--red);"
-                data-unfav="${f.spot_id}">✕</button>
+
+      <!-- Geplante öffentliche Check-ins anderer Nutzer -->
+      ${upcomingHtml}
+
+      <!-- Wetter für diesen Spot (asynchron nachgeladen) -->
+      <div id="favWeather_${f.spot_id}"
+           style="font-size:0.68rem;color:var(--muted);margin-top:0.4rem;
+                  font-family:'Space Mono',monospace;">
+        ⏳ Wetter…
       </div>
+
+      <!-- Eigenen öffentlichen Check-in ankündigen -->
+      <button class="sc-btn success"
+              style="margin-top:0.5rem;width:100%;padding:0.6rem;font-size:0.78rem;"
+              data-announce="${f.spot_id}" data-spotname="${esc(f.spot_name || 'Spot')}">
+        📍 Check-in ankündigen
+      </button>
     </div>`;
   }).join('');
 
+  // ── Event-Listener ──────────────────────────────────────────────────────────
   body.querySelectorAll('[data-fav-lat]').forEach(b =>
     b.addEventListener('click', () => navigateToSpot(+b.dataset.favLat, +b.dataset.favLng))
   );
@@ -2147,6 +2235,119 @@ async function loadFavoritesIntoDrawer(body) {
       loadFavoritesIntoDrawer(body);
     })
   );
+  // Chat-Button direkt aus dem Favoriten-Drawer öffnen
+  body.querySelectorAll('[data-chat-fav]').forEach(b =>
+    b.addEventListener('click', () => {
+      closeDrawer();
+      setTimeout(() => openChatDrawer(b.dataset.chatFav, b.dataset.chatnameFav), 300);
+    })
+  );
+  // Check-in ankündigen – öffnet ein kleines Inline-Formular
+  body.querySelectorAll('[data-announce]').forEach(b =>
+    b.addEventListener('click', () => openCheckinAnnouncement(+b.dataset.announce, b.dataset.spotname, body))
+  );
+
+  // Wetter für alle Favoriten-Spots asynchron nachladen
+  favs.forEach(f => renderFavWeather(f.spot_id, f.lat, f.lng));
+}
+
+// Rendert das Wetter für eine Favoriten-Karte – wiederverwendet fetchWeather()
+async function renderFavWeather(spotId, lat, lng) {
+  const el = document.getElementById(`favWeather_${spotId}`);
+  if (!el) return;
+  const w = await fetchWeather(lat, lng);
+  if (!w || !w.current) { el.style.display = 'none'; return; }
+  const temp = Math.round(w.current.temperature_2m);
+  const code = w.current.weather_code;
+  const wind = Math.round(w.current.wind_speed_10m);
+  el.innerHTML = `${weatherEmoji(code)} ${temp}°C · ${weatherDesc(code)} · 💨 ${wind} km/h`;
+}
+
+// Öffnet ein Inline-Formular zum Ankündigen eines öffentlichen Check-ins.
+// Das Formular erscheint direkt unter dem "Check-in ankündigen"-Button
+// ohne ein neues Modal zu öffnen – das fühlt sich natürlicher an.
+function openCheckinAnnouncement(spotId, spotName, drawerBody) {
+  // Minimale Startzeit: jetzt + 4 Stunden (wie auf dem Server geprüft)
+  const minTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
+  // ISO-String für datetime-local input: "2026-05-20T18:00"
+  const minTimeStr = new Date(minTime.getTime() - minTime.getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 16);
+
+  // Bestehenden Formular-Container entfernen falls vorhanden
+  const existing = document.getElementById('checkinAnnounceForm');
+  if (existing) existing.remove();
+
+  const formHtml = `
+    <div id="checkinAnnounceForm"
+         style="position:fixed;bottom:0;left:0;right:0;z-index:900;
+                background:var(--card2);border-top:1px solid var(--bord);
+                padding:1rem;border-radius:16px 16px 0 0;
+                box-shadow:0 -4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:700;margin-bottom:0.75rem;">
+        📍 Check-in bei: ${esc(spotName)}
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted2);margin-bottom:0.75rem;">
+        Wähle einen Zeitpunkt mindestens 4 Stunden in der Zukunft.<br>
+        Alle Favoriten dieses Spots werden benachrichtigt.
+      </div>
+      <input type="datetime-local" id="checkinTime"
+             min="${minTimeStr}"
+             style="width:100%;padding:0.65rem;background:var(--card);
+                    border:1px solid var(--bord2);border-radius:10px;
+                    color:var(--text);font-size:0.88rem;margin-bottom:0.5rem;">
+      <input type="text" id="checkinNote" placeholder="Kurze Notiz (optional)"
+             maxlength="80"
+             style="width:100%;padding:0.65rem;background:var(--card);
+                    border:1px solid var(--bord2);border-radius:10px;
+                    color:var(--text);font-size:0.88rem;margin-bottom:0.75rem;">
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn-ghost" style="flex:1;"
+                onclick="document.getElementById('checkinAnnounceForm').remove()">
+          Abbrechen
+        </button>
+        <button class="btn-primary" style="flex:2;"
+                onclick="submitCheckinAnnouncement(${spotId})">
+          📍 Ankündigen
+        </button>
+      </div>
+    </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', formHtml);
+  // Direkt zum Zeitfeld springen
+  setTimeout(() => document.getElementById('checkinTime')?.focus(), 100);
+}
+
+// Schickt die Check-in-Ankündigung an den Server.
+async function submitCheckinAnnouncement(spotId) {
+  const timeVal = document.getElementById('checkinTime')?.value;
+  const note    = document.getElementById('checkinNote')?.value?.trim();
+
+  if (!timeVal) { toast('⚠️ Bitte einen Zeitpunkt wählen'); return; }
+
+  const checkinAt = new Date(timeVal).getTime();
+  const minTime   = Date.now() + 4 * 60 * 60 * 1000;
+  if (checkinAt < minTime) {
+    toast('⚠️ Mindestens 4 Stunden in der Zukunft'); return;
+  }
+
+  try {
+    const res = await fetch(`${API}/checkins/public`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ code: CODE, spot_id: spotId, checkin_at: checkinAt, note })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('checkinAnnounceForm')?.remove();
+      toast('✅ Check-in angekündigt – alle Favoriten wurden benachrichtigt!');
+      // Favoriten-Drawer neu laden damit der neue Check-in sofort erscheint
+      loadFavoritesIntoDrawer(document.getElementById('drawerBody'));
+    } else {
+      toast('⚠️ ' + (data.error || 'Fehler'));
+    }
+  } catch {
+    toast('⚠️ Server nicht erreichbar');
+  }
 }
 
 // Favorit hinzufügen oder entfernen.

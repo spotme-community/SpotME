@@ -2,9 +2,6 @@
 <html lang="de">
 <head>
 
-<!-- Eruda – Mobile Console (nur für Debugging)
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script> -->
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
@@ -512,6 +509,73 @@
 #favBadge {
   background: var(--acc);
   color: #0a0d12;
+}
+
+/* ── Favoriten-Drawer – größere Schrift & Touch-Ziele ── */
+.fav-card {
+  padding: 1rem !important;
+  margin-bottom: 1rem !important;
+  gap: 1rem !important;
+  border-radius: 20px !important;
+}
+.fav-icon {
+  font-size: 1.5rem !important;
+}
+.fav-name {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  margin-bottom: 4px !important;
+}
+.fav-meta {
+  font-size: 0.85rem !important;
+  color: var(--muted2);
+}
+.fav-checkin {
+  font-size: 0.75rem !important;
+  margin-top: 4px !important;
+  color: var(--cyan);
+}
+/* Buttons im Favoriten-Drawer */
+.fav-card .sc-btn {
+  height: 38px !important;
+  padding: 0 1rem !important;
+  font-size: 0.85rem !important;
+}
+.fav-card .sc-btn.navigate,
+.fav-card .sc-btn.success {
+  font-weight: 700 !important;
+}
+/* Check-in Ankündigung Button innerhalb der Fav-Card */
+.fav-card .sc-btn.success[data-announce] {
+  padding: 0.8rem !important;
+  font-size: 0.9rem !important;
+}
+/* Wetterzeile in Fav-Card */
+#favWeather_\[^\"]+ {
+  font-size: 0.75rem !important;
+  margin-top: 0.6rem !important;
+}
+/* Geplante Check-in Karten (upcoming) */
+.fav-card [style*="display:flex;align-items:center;gap:0.5rem;"] {
+  padding: 0.6rem 0.75rem !important;
+  border-radius: 14px !important;
+}
+.fav-card [style*="display:flex;align-items:center;gap:0.5rem;"] .sc-btn.success {
+  padding: 0.4rem 0.8rem !important;
+}
+/* Das Inline-Formular für die Check-in Ankündigung */
+#checkinAnnounceForm {
+  font-size: 0.9rem !important;
+}
+#checkinAnnounceForm input,
+#checkinAnnounceForm button {
+  padding: 0.8rem !important;
+  font-size: 0.9rem !important;
+}
+#checkinAnnounceForm .btn-primary,
+#checkinAnnounceForm .btn-ghost {
+  padding: 0.8rem 0 !important;
+  font-size: 0.9rem !important;
 }
 
   </style>
