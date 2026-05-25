@@ -577,6 +577,38 @@
   padding: 0.8rem 0 !important;
   font-size: 0.9rem !important;
 }
+/* ── Spot-Marker um 50% vergrößern ── */
+.my-spot-marker {
+  width: 30px !important;      /* von 20px → 30px (+50%) */
+  height: 30px !important;
+  border-width: 3px !important;
+}
+.other-spot-marker {
+  width: 24px !important;      /* von 16px → 24px (+50%) */
+  height: 24px !important;
+  border-width: 2.5px !important;
+}
+.other-spot-marker.is-online::after {
+  width: 12px !important;      /* von 8px → 12px (+50%) */
+  height: 12px !important;
+  top: -4px !important;
+  right: -4px !important;
+  border-width: 2px !important;
+}
+.user-marker {
+  width: 21px !important;      /* von 14px → 21px (+50%) */
+  height: 21px !important;
+  border-width: 3px !important;
+}
+.new-spot-marker {
+  width: 27px !important;      /* von 18px → 27px (+50%) */
+  height: 27px !important;
+  border-width: 3px !important;
+}
+.new-spot-marker::after {
+  inset: -7px !important;      /* von -5px → -7px */
+  border-width: 2.5px !important;
+}
 
   </style>
 </head>
