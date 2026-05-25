@@ -2,6 +2,9 @@
 <html lang="de">
 <head>
 
+<!-- Eruda – Mobile Console (nur für Debugging)
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script> -->
 
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0d12">
@@ -511,105 +514,6 @@
   color: #0a0d12;
 }
 
-/* ── Favoriten-Drawer – größere Schrift & Touch-Ziele ── */
-.fav-card {
-  padding: 1rem !important;
-  margin-bottom: 1rem !important;
-  gap: 1rem !important;
-  border-radius: 20px !important;
-}
-.fav-icon {
-  font-size: 1.5rem !important;
-}
-.fav-name {
-  font-size: 1rem !important;
-  font-weight: 700 !important;
-  margin-bottom: 4px !important;
-}
-.fav-meta {
-  font-size: 0.85rem !important;
-  color: var(--muted2);
-}
-.fav-checkin {
-  font-size: 0.75rem !important;
-  margin-top: 4px !important;
-  color: var(--cyan);
-}
-/* Buttons im Favoriten-Drawer */
-.fav-card .sc-btn {
-  height: 38px !important;
-  padding: 0 1rem !important;
-  font-size: 0.85rem !important;
-}
-.fav-card .sc-btn.navigate,
-.fav-card .sc-btn.success {
-  font-weight: 700 !important;
-}
-/* Check-in Ankündigung Button innerhalb der Fav-Card */
-.fav-card .sc-btn.success[data-announce] {
-  padding: 0.8rem !important;
-  font-size: 0.9rem !important;
-}
-/* Wetterzeile in Fav-Card */
-#favWeather_\[^\"]+ {
-  font-size: 0.75rem !important;
-  margin-top: 0.6rem !important;
-}
-/* Geplante Check-in Karten (upcoming) */
-.fav-card [style*="display:flex;align-items:center;gap:0.5rem;"] {
-  padding: 0.6rem 0.75rem !important;
-  border-radius: 14px !important;
-}
-.fav-card [style*="display:flex;align-items:center;gap:0.5rem;"] .sc-btn.success {
-  padding: 0.4rem 0.8rem !important;
-}
-/* Das Inline-Formular für die Check-in Ankündigung */
-#checkinAnnounceForm {
-  font-size: 0.9rem !important;
-}
-#checkinAnnounceForm input,
-#checkinAnnounceForm button {
-  padding: 0.8rem !important;
-  font-size: 0.9rem !important;
-}
-#checkinAnnounceForm .btn-primary,
-#checkinAnnounceForm .btn-ghost {
-  padding: 0.8rem 0 !important;
-  font-size: 0.9rem !important;
-}
-/* ── Spot-Marker um 50% vergrößern ── */
-.my-spot-marker {
-  width: 30px !important;      /* von 20px → 30px (+50%) */
-  height: 30px !important;
-  border-width: 3px !important;
-}
-.other-spot-marker {
-  width: 24px !important;      /* von 16px → 24px (+50%) */
-  height: 24px !important;
-  border-width: 2.5px !important;
-}
-.other-spot-marker.is-online::after {
-  width: 12px !important;      /* von 8px → 12px (+50%) */
-  height: 12px !important;
-  top: -4px !important;
-  right: -4px !important;
-  border-width: 2px !important;
-}
-.user-marker {
-  width: 21px !important;      /* von 14px → 21px (+50%) */
-  height: 21px !important;
-  border-width: 3px !important;
-}
-.new-spot-marker {
-  width: 27px !important;      /* von 18px → 27px (+50%) */
-  height: 27px !important;
-  border-width: 3px !important;
-}
-.new-spot-marker::after {
-  inset: -7px !important;      /* von -5px → -7px */
-  border-width: 2.5px !important;
-}
-
   </style>
 </head>
 <body>
@@ -1029,14 +933,24 @@ async function loadAllSpots() {
     if (r.ok) {
       const freshSpots = await r.json();
       allSpots = freshSpots;
-      mySpots = allSpots.filter(s => s.code === CODE);
-      document.getElementById('statSpots').textContent = mySpots.length;
+      document.getElementById('statSpots').textContent =
+        allSpots.filter(s => s.code === CODE).length;
       await renderMarkers();
-      // 3. Aktualisierte Spots in IndexedDB speichern
       await saveSpotsOffline(allSpots);
     }
+
+    // Eigene Spots separat laden – dieser Endpunkt liefert image + image_status
+    // damit der Bearbeiten-Dialog und der mySpots-Drawer korrekte Daten haben.
+    // Das passiert parallel zum allSpots-Laden damit es nicht blockiert.
+    const r2 = await fetch(`${API}/userspots/${CODE}`);
+    if (r2.ok) {
+      mySpots = await r2.json();
+      document.getElementById('statSpots').textContent = mySpots.length;
+    } else {
+      mySpots = allSpots.filter(s => s.code === CODE);
+    }
   } catch (err) {
-    // Offline – die bereits geladenen offlineSpots bleiben angezeigt
+    mySpots = allSpots.filter(s => s.code === CODE);
     console.warn('Kein Netzwerk, verwende Cache-Daten');
   }
 }
@@ -1314,12 +1228,9 @@ function openDrawer(type) {
     title.textContent = 'MEINE SPOTS';
     body.innerHTML = mySpots.length
       ? mySpots.map(s => {
-          // active kann true, false, oder undefined sein (für ältere Spots ohne die Spalte)
-          // Wir behandeln undefined wie true – bestehende Spots bleiben sichtbar
           const isActive = s.active !== false;
           return `<div class="spot-card" style="opacity:${isActive ? '1' : '0.55'};">
             <div class="sc-icon">
-              <!-- Spot-Icon zeigt den Status: orange=aktiv, grau=pausiert -->
               <span style="color:${isActive ? 'var(--acc)' : 'var(--muted)'};">🟠</span>
             </div>
             <div class="sc-info">
@@ -1327,17 +1238,24 @@ function openDrawer(type) {
               <div class="sc-detail">
                 <span class="sc-tag">${s.wishTag || ''}</span>
                 ${spotAgeHtml(s.createdAt || s.created_at)}
-                <!-- Status-Pill zeigt dem Nutzer sofort ob der Spot sichtbar ist -->
                 <span style="font-size:0.62rem;font-weight:600;
                              color:${isActive ? '#10b981' : 'var(--muted)'};
                              font-family:'Space Mono',monospace;">
                   ${isActive ? '● Aktiv' : '○ Pausiert'}
                 </span>
+                ${s.image_status === 'pending'
+                  ? `<span style="font-size:0.62rem;color:var(--acc);
+                                  font-family:'Space Mono',monospace;">⏳ Bild pending</span>`
+                  : ''}
               </div>
             </div>
             <div class="sc-actions">
               <button class="sc-btn navigate" data-lat="${s.lat}" data-lng="${s.lng}">🧭</button>
-              <!-- Toggle-Button: wechselt zwischen Aktivieren und Pausieren -->
+              <button class="sc-btn" data-edit="${s.id}"
+                      style="background:rgba(245,158,11,0.08);
+                             border-color:rgba(245,158,11,0.3);
+                             color:var(--acc);"
+                      title="Spot bearbeiten">✏️</button>
               <button class="sc-btn" data-toggle="${s.id}"
                       style="background:${isActive
                         ? 'rgba(245,158,11,0.12)'
@@ -1357,6 +1275,28 @@ function openDrawer(type) {
 
     body.querySelectorAll('[data-lat]').forEach(b =>
       b.addEventListener('click', () => navigateToSpot(+b.dataset.lat, +b.dataset.lng))
+    );
+
+    // Bearbeiten-Button: lädt den Spot frisch vom Server um image_status zu kennen
+    // dann öffnet es das Bearbeiten-Modal mit allen aktuellen Daten
+    body.querySelectorAll('[data-edit]').forEach(b =>
+      b.addEventListener('click', async () => {
+        const spotId = +b.dataset.edit;
+        try {
+          // Eigene Spots vom Server laden – enthält image + image_status
+          const r = await fetch(`${API}/userspots/${CODE}`);
+          if (r.ok) {
+            const spots = await r.json();
+            const spot  = spots.find(s => s.id === spotId);
+            if (spot) {
+              closeDrawer();
+              setTimeout(() => openSpotEdit(spot), 300);
+            }
+          }
+        } catch {
+          toast('⚠️ Fehler beim Laden');
+        }
+      })
     );
 
     // Toggle-Button: Spot aktivieren oder pausieren
