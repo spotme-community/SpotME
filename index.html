@@ -897,7 +897,8 @@ function initMap() {
       const el = document.createElement('div');
       el.style.cssText='width:12px;height:12px;border-radius:50%;background:rgba(245,158,11,0.5);border:2px solid #f59e0b;';
       new maplibregl.Marker({element:el}).setLngLat([e.lngLat.lng,e.lngLat.lat]).addTo(map);
-      placeMode=false; hidePlaceModeUI(); openSpotForm();
+      placeMode=false; hidePlaceModeUI();
+      window.location.href = `spot-erstellen.html?lat=${tempLatLng.lat}&lng=${tempLatLng.lng}`;
     } else {
       if (currentDrawer) closeDrawer();
     }
