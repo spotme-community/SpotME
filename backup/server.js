@@ -1592,16 +1592,25 @@ async function unlockCache(reqA, reqBId) {
 
 // 🟠 Eigenen Spot anlegen
 app.post('/api/userspots', async (req, res) => {
-  const { code, lat, lng, name, description, wishTag, image } = req.body;
+  const { code, lat, lng, name, description, wishTag, image,
+          area_type, time_pref, crowd_level, intimacy_level } = req.body;
   if (!code || lat == null || lng == null || !name || !wishTag) {
     return res.status(400).json({ error: 'Pflichtfelder: code, lat, lng, name, wishTag' });
   }
   try {
     await pool.query(
       // active=true ist der Standard – jeder neue Spot ist sofort sichtbar
-      `INSERT INTO user_spots (code, lat, lng, name, description, wish_tag, image, active, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
-      [code, lat, lng, name, description || null, wishTag, image || null, Date.now()]
+      // Die neuen Felder area_type, time_pref, crowd_level, intimacy_level
+      // sind optional – ältere Spots ohne diese Felder funktionieren weiterhin.
+      `INSERT INTO user_spots
+         (code, lat, lng, name, description, wish_tag, image, active,
+          area_type, time_pref, crowd_level, intimacy_level, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)`,
+      [
+        code, lat, lng, name, description || null, wishTag, image || null,
+        area_type || null, time_pref || null, crowd_level || null, intimacy_level || null,
+        Date.now()
+      ]
     );
     res.json({ success: true });
   } catch (e) {
