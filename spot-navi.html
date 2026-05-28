@@ -7,13 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
       background: #0a0d12;
       color: #e2e8f0;
@@ -26,22 +20,9 @@
       height: 100vh;
       overflow-y: auto;
     }
-
-    .map-container {
-      position: relative;
-      height: 33vh;
-      width: 100%;
-      background: #0f1318;
-      z-index: 1;
-    }
-    #map {
-      width: 100%;
-      height: 100%;
-      filter: brightness(0.85);
-    }
-    .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo {
-      display: none !important;
-    }
+    .map-container { position: relative; height: 33vh; width: 100%; background: #0f1318; z-index: 1; }
+    #map { width: 100%; height: 100%; filter: brightness(0.85); }
+    .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display: none !important; }
 
     .description-box {
       background: #141a22;
@@ -52,201 +33,67 @@
       padding: 24px 20px;
       border-bottom: 1px solid rgba(255,255,255,0.07);
     }
-    .spot-name {
-      font-family: 'Space Mono', monospace;
-      font-size: 24px;
-      font-weight: 700;
-      color: #f59e0b;
-      margin-bottom: 8px;
-      letter-spacing: -0.3px;
-    }
-    .spot-meta {
-      font-size: 14px;
-      color: #94a3b8;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .spot-tag {
-      background: rgba(245,158,11,0.12);
-      border: 1px solid rgba(245,158,11,0.3);
-      padding: 4px 12px;
-      border-radius: 40px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #f59e0b;
-    }
-    .spot-description {
-      font-size: 17px;
-      line-height: 1.45;
-      color: #cbd5e1;
-      max-height: calc(1.45em * 5);
-      overflow-y: auto;
-      margin-top: 10px;
-      padding-right: 6px;
-    }
-    .spot-description:empty {
-      display: none;
-    }
-    .spot-owner {
-      margin-top: 12px;
-      font-size: 14px;
-      color: #64748b;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .owner-avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 28px;
-      background: #f59e0b;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: 700;
-      color: #0a0d12;
-    }
+    .spot-name { font-family: 'Space Mono', monospace; font-size: 24px; font-weight: 700; color: #f59e0b; margin-bottom: 8px; letter-spacing: -0.3px; }
+    .spot-meta { font-size: 14px; color: #94a3b8; display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+    .spot-tag { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); padding: 4px 12px; border-radius: 40px; font-size: 13px; font-weight: 600; color: #f59e0b; }
+    .spot-description { font-size: 17px; line-height: 1.45; color: #cbd5e1; max-height: calc(1.45em * 5); overflow-y: auto; margin-top: 10px; padding-right: 6px; }
+    .spot-description:empty { display: none; }
+    .spot-owner { margin-top: 12px; font-size: 14px; color: #64748b; display: flex; align-items: center; gap: 8px; }
+    .owner-avatar { width: 28px; height: 28px; border-radius: 28px; background: #f59e0b; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #0a0d12; }
 
-    /* 5 Buttons – flexibel anordnen */
-    .action-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      padding: 20px 16px 24px;
-      background: #0a0d12;
-      justify-content: center;
-    }
+    .action-grid { display: flex; flex-wrap: wrap; gap: 12px; padding: 20px 16px 24px; background: #0a0d12; justify-content: center; }
     .action-btn {
-      flex: 1 0 calc(33% - 12px);
-      min-width: 100px;
-      background: #141a22;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 24px;
-      padding: 14px 8px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      font-size: 18px;
-      font-weight: 700;
-      color: #e2e8f0;
-      transition: all 0.2s ease;
-      cursor: pointer;
-      text-align: center;
+      flex: 1 0 calc(33% - 12px); min-width: 100px;
+      background: #141a22; border: 1px solid rgba(255,255,255,0.08); border-radius: 24px;
+      padding: 14px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+      font-size: 18px; font-weight: 700; color: #e2e8f0; transition: all 0.2s ease; cursor: pointer; text-align: center;
     }
-    .action-btn:active {
-      transform: scale(0.97);
-      background: #1a2230;
-    }
-    .action-icon {
-      font-size: 28px;
-    }
-    .action-label {
-      font-size: 14px;
-      font-weight: 600;
-    }
-    .action-sub {
-      font-size: 11px;
-      color: #94a3b8;
-    }
+    .action-btn:active { transform: scale(0.97); background: #1a2230; }
+    .action-icon { font-size: 28px; }
+    .action-label { font-size: 14px; font-weight: 600; }
+    .action-sub { font-size: 11px; color: #94a3b8; }
+    .btn-fav.active { background: rgba(245,158,11,0.15); border-color: #f59e0b; color: #f59e0b; }
+    .btn-nav.active { background: rgba(34,211,238,0.15); border-color: #22d3ee; color: #22d3ee; }
 
-    .btn-fav.active {
-      background: rgba(245,158,11,0.15);
-      border-color: #f59e0b;
-      color: #f59e0b;
-    }
-    .btn-nav.active {
-      background: rgba(34,211,238,0.15);
-      border-color: #22d3ee;
-      color: #22d3ee;
-    }
     .nav-panel {
-      background: #0f1318;
-      margin: 4px 16px 12px;
-      border-radius: 20px;
-      padding: 10px 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-family: 'Space Mono', monospace;
-      font-size: 14px;
-      border: 1px solid rgba(255,255,255,0.08);
-      backdrop-filter: blur(4px);
+      background: #0f1318; margin: 4px 16px 12px; border-radius: 20px; padding: 10px 12px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: 'Space Mono', monospace; font-size: 14px;
+      border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(4px);
     }
-    .nav-info {
-      display: flex;
-      gap: 16px;
-    }
-    .nav-distance, .nav-duration {
-      background: #1a2230;
-      padding: 4px 10px;
-      border-radius: 40px;
-      color: #22d3ee;
-    }
+    .nav-info { display: flex; gap: 16px; }
+    .nav-distance, .nav-duration { background: #1a2230; padding: 4px 10px; border-radius: 40px; color: #22d3ee; }
+
     .toast {
-      position: fixed;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      background: rgba(20,26,34,0.95);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 60px;
-      padding: 10px 20px;
-      font-size: 14px;
-      font-weight: 600;
-      z-index: 1000;
-      opacity: 0;
-      pointer-events: none;
-      transition: all 0.3s;
-      white-space: nowrap;
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: rgba(20,26,34,0.95); backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 60px;
+      padding: 10px 20px; font-size: 14px; font-weight: 600; z-index: 1000;
+      opacity: 0; pointer-events: none; transition: all 0.3s; white-space: nowrap;
     }
-    .toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
     .back-link {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      background: rgba(15,19,24,0.85);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 40px;
-      padding: 8px 16px;
-      font-size: 14px;
-      font-weight: 500;
-      color: #e2e8f0;
-      text-decoration: none;
-      z-index: 20;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      position: fixed; top: 16px; left: 16px;
+      background: rgba(15,19,24,0.85); backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 40px;
+      padding: 8px 16px; font-size: 14px; font-weight: 500;
+      color: #e2e8f0; text-decoration: none; z-index: 20;
     }
-    .demo-btn {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: rgba(16,185,129,0.9);
-      border: none;
-      border-radius: 40px;
-      padding: 8px 16px;
-      font-size: 13px;
-      font-weight: 700;
-      color: #0a0d12;
-      z-index: 30;
-      cursor: pointer;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    .demo-hint {
+      background: rgba(245,158,11,0.1);
+      border-left: 3px solid #f59e0b;
+      padding: 12px 16px;
+      margin: 16px;
+      border-radius: 16px;
+      font-size: 14px;
+      color: #94a3b8;
     }
   </style>
 </head>
 <body>
   <a href="/" class="back-link">← Zurück</a>
-  <div class="map-container">
-    <div id="map"></div>
-  </div>
+  <div class="map-container"><div id="map"></div></div>
   <div class="description-box" id="infoBox">
     <div class="spot-name" id="spotName">—</div>
     <div class="spot-meta">
@@ -257,7 +104,6 @@
     <div class="spot-owner" id="ownerInfo"></div>
   </div>
 
-  <!-- Navigationsinfo (wird eingeblendet wenn aktiv) -->
   <div id="navPanel" class="nav-panel" style="display: none;">
     <div class="nav-info">
       <span class="nav-distance" id="navDist">0 m</span>
@@ -267,59 +113,32 @@
   </div>
 
   <div class="action-grid">
-    <div class="action-btn btn-fav" id="favBtn">
-      <div class="action-icon">☆</div>
-      <div class="action-label">Favorit</div>
-      <div class="action-sub">speichern</div>
-    </div>
-    <div class="action-btn" id="distanceBtn">
-      <div class="action-icon">📍</div>
-      <div class="action-label">Entfernung</div>
-      <div class="action-sub" id="distValue">— km</div>
-    </div>
-    <div class="action-btn btn-checkin" id="checkinBtn">
-      <div class="action-icon">✅</div>
-      <div class="action-label">Check‑in</div>
-      <div class="action-sub">Jetzt da sein</div>
-    </div>
-    <div class="action-btn" id="chatBtn">
-      <div class="action-icon">💬</div>
-      <div class="action-label">Chat</div>
-      <div class="action-sub">mit Besitzer</div>
-    </div>
-    <div class="action-btn" id="navBtn">
-      <div class="action-icon">🧭</div>
-      <div class="action-label">Navigation</div>
-      <div class="action-sub">Live-Route</div>
-    </div>
+    <div class="action-btn btn-fav" id="favBtn"><div class="action-icon">☆</div><div class="action-label">Favorit</div><div class="action-sub">speichern</div></div>
+    <div class="action-btn" id="distanceBtn"><div class="action-icon">📍</div><div class="action-label">Entfernung</div><div class="action-sub" id="distValue">— km</div></div>
+    <div class="action-btn btn-checkin" id="checkinBtn"><div class="action-icon">✅</div><div class="action-label">Check‑in</div><div class="action-sub">Jetzt da sein</div></div>
+    <div class="action-btn" id="chatBtn"><div class="action-icon">💬</div><div class="action-label">Chat</div><div class="action-sub">mit Besitzer</div></div>
+    <div class="action-btn" id="navBtn"><div class="action-icon">🧭</div><div class="action-label">Navigation</div><div class="action-sub">Live-Route</div></div>
   </div>
 
-  <button id="demoSpotBtn" class="demo-btn">📍 Demo Spot erstellen</button>
   <div class="toast" id="toast"></div>
 
   <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
   <script>
     'use strict';
 
-    // ---------- Globale Variablen ----------
     const API = 'https://spotme-chat-obom.onrender.com/api';
     let CODE = localStorage.getItem('sm_code') || '000000';
-    let spotData = null;               // echter Spot oder Demo
+    let spotData = null;          // { lat, lng, name, ... }
     let map = null;
     let userMarker = null;
     let spotMarker = null;
     let userPos = null;
     let favoritesCache = new Set();
     let currentDistance = null;
-
-    // Navigation
     let navActive = false;
     let watchId = null;
-    let currentRoute = null;           // OSRM Route Objekt
-    let routeSources = [];              // zum Löschen
-
-    // Demo-Modus Flag
     let isDemoSpot = false;
+    let pendingSpotFromClick = false;   // Marker wurde gesetzt, aber noch kein spotData erzeugt
 
     // ---------- Hilfsfunktionen ----------
     function showToast(msg) {
@@ -328,299 +147,93 @@
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 2800);
     }
-
-    function esc(s) {
-      const div = document.createElement('div');
-      div.textContent = String(s || '');
-      return div.innerHTML;
+    function esc(s) { const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+    function haversineKm(lat1,lng1,lat2,lng2) {
+      const R=6371, dL=(lat2-lat1)*Math.PI/180, dG=(lng2-lng1)*Math.PI/180;
+      const a=Math.sin(dL/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dG/2)**2;
+      return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
     }
+    function formatDistance(m) { return m<1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`; }
 
-    function haversineKm(lat1, lng1, lat2, lng2) {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLng = (lng2 - lng1) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2)**2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-
-    function formatDistance(meters) {
-      if (meters < 1000) return `${Math.round(meters)} m`;
-      return `${(meters / 1000).toFixed(1)} km`;
-    }
-
-    // ---------- Routen zeichnen / löschen (angepasst von index.html) ----------
-    async function fetchAndDrawRoute(startLat, startLng, endLat, endLng) {
-      if (!map) return;
+    // ---------- Routen (OSRM) ----------
+    async function fetchAndDrawRoute(startLat,startLng,endLat,endLng) {
+      if(!map) return;
       clearRoutes();
-      const base = `${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
-      const url = `https://router.project-osrm.org/route/v1/driving/${base}`;
+      const base=`${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+      const url=`https://router.project-osrm.org/route/v1/driving/${base}`;
       try {
-        const res = await fetch(url);
-        const data = await res.json();
-        if (!data.routes || data.routes.length === 0) throw new Error('Keine Route');
-        const route = data.routes[0];
-        currentRoute = route;
-        const geometry = route.geometry;
-        const distance = route.distance; // Meter
-        const duration = route.duration; // Sekunden
-
-        // UI aktualisieren
-        document.getElementById('navDist').textContent = distance < 1000 ? `${Math.round(distance)} m` : `${(distance/1000).toFixed(1)} km`;
-        document.getElementById('navDuration').textContent = `${Math.round(duration/60)} min`;
-        document.getElementById('navInstruction').textContent = 'Folge der blauen Linie';
-
-        // Quelle und Layer hinzufügen
-        map.addSource('route-source', {
-          type: 'geojson',
-          data: { type: 'Feature', geometry: geometry }
-        });
-        routeSources.push('route-source');
-        map.addLayer({
-          id: 'route-line-casing',
-          type: 'line',
-          source: 'route-source',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#0a0d12', 'line-width': 8, 'line-opacity': 0.8 }
-        });
-        map.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route-source',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#22d3ee', 'line-width': 4, 'line-opacity': 0.9 }
-        });
-        return true;
-      } catch (err) {
-        console.warn('Route Fehler:', err);
-        showToast('❌ Route konnte nicht berechnet werden');
-        return false;
-      }
+        const res=await fetch(url);
+        const data=await res.json();
+        if(!data.routes?.length) throw new Error();
+        const route=data.routes[0];
+        const distance=route.distance, duration=route.duration;
+        document.getElementById('navDist').textContent=distance<1000?`${Math.round(distance)} m`:`${(distance/1000).toFixed(1)} km`;
+        document.getElementById('navDuration').textContent=`${Math.round(duration/60)} min`;
+        map.addSource('route-source',{type:'geojson',data:{type:'Feature',geometry:route.geometry}});
+        map.addLayer({id:'route-line-casing',type:'line',source:'route-source',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#0a0d12','line-width':8,'line-opacity':0.8}});
+        map.addLayer({id:'route-line',type:'line',source:'route-source',layout:{'line-join':'round','line-cap':'round'},paint:{'line-color':'#22d3ee','line-width':4,'line-opacity':0.9}});
+      } catch(e){ showToast('❌ Route nicht verfügbar'); }
     }
-
     function clearRoutes() {
-      if (!map) return;
-      ['route-line', 'route-line-casing'].forEach(id => {
-        if (map.getLayer(id)) map.removeLayer(id);
-      });
-      if (map.getSource('route-source')) map.removeSource('route-source');
-      routeSources = [];
-      currentRoute = null;
+      if(!map) return;
+      if(map.getLayer('route-line')) map.removeLayer('route-line');
+      if(map.getLayer('route-line-casing')) map.removeLayer('route-line-casing');
+      if(map.getSource('route-source')) map.removeSource('route-source');
     }
 
     // ---------- Karte & Marker ----------
-    function initMap(lat, lng) {
-      if (map) map.remove();
+    function initMap(centerLat, centerLng) {
+      if(map) map.remove();
       map = new maplibregl.Map({
         container: 'map',
         style: 'https://tiles.openfreemap.org/styles/bright',
-        center: [lng, lat],
-        zoom: 14,
+        center: [centerLng, centerLat],
+        zoom: 15,
         attributionControl: false
       });
-
-      map.on('load', () => {
-        if (spotMarker) spotMarker.remove();
-        const el = document.createElement('div');
-        el.style.cssText = 'width:26px;height:26px;background:#f59e0b;border-radius:50%;border:3px solid white;box-shadow:0 0 16px rgba(245,158,11,0.8);cursor:pointer;';
-        spotMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
-        if (userPos) updateUserMarkerAndBounds();
-        else map.setCenter([lng, lat]);
+      map.on('load', ()=>{
+        if(spotMarker) spotMarker.remove();
+        if(spotData){
+          const el=document.createElement('div');
+          el.style.cssText='width:26px;height:26px;background:#f59e0b;border-radius:50%;border:3px solid white;box-shadow:0 0 16px rgba(245,158,11,0.8);cursor:pointer;';
+          spotMarker=new maplibregl.Marker({element:el}).setLngLat([spotData.lng,spotData.lat]).addTo(map);
+        }
+        if(userPos) updateUserMarker();
+      });
+      // Klick zum Setzen eines temporären Spots (nur wenn kein Spot geladen und kein Demo-Modus aktiv)
+      map.on('click', (e)=>{
+        if(spotData && !isDemoSpot) return; // echter Spot bereits geladen
+        const {lat,lng}=e.lngLat;
+        createTempSpot(lat,lng);
       });
     }
 
-    function updateUserMarkerAndBounds() {
-      if (!userPos || !map || !spotData) return;
-      if (userMarker) userMarker.remove();
-      const uel = document.createElement('div');
-      uel.className = 'user-marker';
-      uel.style.cssText = 'width:18px;height:18px;background:#22d3ee;border-radius:50%;border:2px solid white;box-shadow:0 0 8px rgba(34,211,238,0.8);';
-      userMarker = new maplibregl.Marker({ element: uel }).setLngLat([userPos.lng, userPos.lat]).addTo(map);
-      if (!navActive) {
-        const bounds = new maplibregl.LngLatBounds([spotData.lng, spotData.lat], [userPos.lng, userPos.lat]);
-        map.fitBounds(bounds, { padding: 60, duration: 500 });
+    function updateUserMarker() {
+      if(!userPos || !map) return;
+      if(userMarker) userMarker.remove();
+      const uel=document.createElement('div');
+      uel.style.cssText='width:18px;height:18px;background:#22d3ee;border-radius:50%;border:2px solid white;box-shadow:0 0 8px rgba(34,211,238,0.8);';
+      userMarker=new maplibregl.Marker({element:uel}).setLngLat([userPos.lng,userPos.lat]).addTo(map);
+      if(!navActive && spotData){
+        const bounds=new maplibregl.LngLatBounds([spotData.lng,spotData.lat],[userPos.lng,userPos.lat]);
+        map.fitBounds(bounds,{padding:60,duration:300});
       }
     }
 
-    // ---------- Geolocation (einmalig + live) ----------
-    function requestLocation() {
-      if (!navigator.geolocation) {
-        showToast('❌ GPS nicht verfügbar');
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          updateDistance();
-          if (map && spotData) {
-            updateUserMarkerAndBounds();
-          }
-        },
-        (err) => {
-          console.warn(err);
-          showToast('⚠️ Standort nicht verfügbar');
-          document.getElementById('spotDistance').innerHTML = '📍 GPS nicht verfügbar';
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    }
-
-    // ---------- Entfernung & UI ----------
-    function updateDistance() {
-      if (!userPos || !spotData) return;
-      const distanceKm = haversineKm(userPos.lat, userPos.lng, spotData.lat, spotData.lng);
-      currentDistance = distanceKm * 1000;
-      const formatted = formatDistance(currentDistance);
-      document.getElementById('spotDistance').innerHTML = `📍 ${formatted}`;
-      document.getElementById('distValue').textContent = formatted;
-    }
-
-    // ---------- Favoriten-Logik (vereinfacht für Demo) ----------
-    async function loadFavoriteStatus(spotId) {
-      if (isDemoSpot) return;
-      try {
-        const r = await fetch(`${API}/favorites/${CODE}`);
-        if (r.ok) {
-          const favs = await r.json();
-          favoritesCache.clear();
-          favs.forEach(f => favoritesCache.add(String(f.spot_id)));
-          updateFavButton(spotId);
-        }
-      } catch {}
-    }
-
-    function updateFavButton(spotId) {
-      const isFav = favoritesCache.has(String(spotId));
-      const btn = document.getElementById('favBtn');
-      btn.querySelector('.action-icon').textContent = isFav ? '⭐' : '☆';
-      btn.querySelector('.action-sub').textContent = isFav ? 'gespeichert' : 'speichern';
-      btn.classList.toggle('active', isFav);
-    }
-
-    async function toggleFavorite(spotId) {
-      if (isDemoSpot) { showToast('⭐ Demo-Spot kann nicht gespeichert werden'); return; }
-      const isFav = favoritesCache.has(String(spotId));
-      try {
-        if (isFav) {
-          await fetch(`${API}/favorites/${spotId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: CODE }) });
-          favoritesCache.delete(String(spotId));
-          showToast('⭐ Aus Favoriten entfernt');
-        } else {
-          await fetch(`${API}/favorites`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: CODE, spot_id: spotId }) });
-          favoritesCache.add(String(spotId));
-          showToast('⭐ Favorit gespeichert');
-        }
-        updateFavButton(spotId);
-      } catch { showToast('⚠️ Fehler'); }
-    }
-
-    // ---------- Check-in (Demo: nur Toast) ----------
-    async function performCheckin(spotId) {
-      if (isDemoSpot) { showToast('✅ Demo: Check-in simuliert'); return; }
-      if (!userPos) { showToast('📍 Standort wird benötigt'); requestLocation(); return; }
-      try {
-        const res = await fetch(`${API}/checkins/public`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: CODE, spot_id: spotId, checkin_at: Date.now(), note: 'Jetzt da!' })
-        });
-        const data = await res.json();
-        if (data.success) showToast('✅ Check-in erfolgreich!');
-        else showToast('⚠️ ' + (data.error || 'Fehler'));
-      } catch { showToast('⚠️ Server nicht erreichbar'); }
-    }
-
-    function openChat() {
-      if (isDemoSpot || !spotData?.code) { showToast('💬 Demo: Chat simuliert'); return; }
-      window.location.href = `/index.html?openChat=${spotData.code}&chatName=${encodeURIComponent(spotData.name || 'Spot')}`;
-    }
-
-    // ---------- Live Navigation ----------
-    async function startNavigation() {
-      if (!userPos || !spotData) {
-        showToast('📍 Standort oder Spot fehlt');
-        return;
-      }
-      if (navActive) {
-        stopNavigation();
-        return;
-      }
-      navActive = true;
-      document.getElementById('navPanel').style.display = 'flex';
-      document.getElementById('navBtn').classList.add('active');
-      document.getElementById('navBtn').querySelector('.action-sub').textContent = 'Aktiv';
-
-      // Route initial zeichnen
-      await fetchAndDrawRoute(userPos.lat, userPos.lng, spotData.lat, spotData.lng);
-      // Kartenansicht auf Nutzer ausrichten
-      map.jumpTo({ center: [userPos.lng, userPos.lat], zoom: 17, pitch: 50, bearing: 0 });
-
-      // Live-Tracking starten
-      watchId = navigator.geolocation.watchPosition(
-        async (pos) => {
-          const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          userPos = newPos;
-          updateDistance();
-          if (userMarker) userMarker.setLngLat([userPos.lng, userPos.lat]);
-          else updateUserMarkerAndBounds();
-
-          // Karte folgen (mit Heading falls verfügbar)
-          map.jumpTo({
-            center: [userPos.lng, userPos.lat],
-            bearing: pos.coords.heading || 0,
-            pitch: 50,
-            zoom: 17
-          });
-
-          // Route neu berechnen (falls Nutzer abweicht)
-          await fetchAndDrawRoute(userPos.lat, userPos.lng, spotData.lat, spotData.lng);
-        },
-        (err) => { console.warn(err); showToast('GPS Signal verloren'); },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-      );
-    }
-
-    function stopNavigation() {
-      if (watchId) navigator.geolocation.clearWatch(watchId);
-      navActive = false;
-      document.getElementById('navPanel').style.display = 'none';
-      document.getElementById('navBtn').classList.remove('active');
-      document.getElementById('navBtn').querySelector('.action-sub').textContent = 'Live-Route';
-      clearRoutes();
-      // Zurück zur ursprünglichen Ansicht mit Spot + Nutzer
-      if (userPos && spotData) {
-        const bounds = new maplibregl.LngLatBounds([spotData.lng, spotData.lat], [userPos.lng, userPos.lat]);
-        map.fitBounds(bounds, { padding: 60, duration: 500 });
-      }
-    }
-
-    // ---------- Demo Spot erstellen ----------
-    function createDemoSpot() {
-      if (!userPos) {
-        showToast('📍 Standort wird benötigt, um Demo-Spot in der Nähe zu erstellen');
-        requestLocation();
-        setTimeout(() => {
-          if (userPos) createDemoSpot();
-        }, 2000);
-        return;
-      }
-      // Zufällige Verschiebung ±0.01 Grad (ca. 1 km)
-      const offsetLat = (Math.random() - 0.5) * 0.02;
-      const offsetLng = (Math.random() - 0.5) * 0.02;
-      const demoLat = userPos.lat + offsetLat;
-      const demoLng = userPos.lng + offsetLng;
-
-      // Demo-Spot-Daten
+    function createTempSpot(lat,lng) {
+      // Demo-Spot aus Klick erstellen
       spotData = {
-        id: 'demo_' + Date.now(),
-        name: '🧪 Demo Spot (temporär)',
-        wishTag: 'Testort',
-        description: 'Dieser Spot wurde nur für die Navigation erstellt. Er wird nicht gespeichert.',
-        lat: demoLat,
-        lng: demoLng,
-        code: 'DEMO_USER',
+        id: 'demo_'+Date.now(),
+        name: '📍 Temporärer Spot',
+        wishTag: 'Test',
+        description: 'Dieser Spot wurde durch Klick auf die Karte erstellt. Du kannst jetzt die Navigation starten.',
+        lat: lat, lng: lng,
+        code: 'DEMO',
         image: null,
         created_at: Date.now()
       };
       isDemoSpot = true;
+      pendingSpotFromClick = false;
 
       // UI aktualisieren
       document.getElementById('spotName').textContent = spotData.name;
@@ -628,74 +241,163 @@
       const descEl = document.getElementById('spotDescription');
       descEl.textContent = spotData.description;
       descEl.style.display = 'block';
-      document.getElementById('ownerInfo').innerHTML = `<div class="owner-avatar">🧪</div><span>Demo-Spot (nicht permanent)</span>`;
+      document.getElementById('ownerInfo').innerHTML = `<div class="owner-avatar">🧪</div><span>Temporärer Spot (nur für diese Sitzung)</span>`;
       document.getElementById('favBtn').style.opacity = '0.5';
       document.getElementById('favBtn').style.pointerEvents = 'none';
+      document.getElementById('checkinBtn').style.opacity = '0.5';
+      document.getElementById('checkinBtn').style.pointerEvents = 'none';
+      document.getElementById('chatBtn').style.opacity = '0.5';
+      document.getElementById('chatBtn').style.pointerEvents = 'none';
 
-      // Karte neu initialisieren
-      initMap(demoLat, demoLng);
-      updateDistance();
-
-      showToast('✅ Demo-Spot erstellt – starte Navigation!');
+      if(spotMarker) spotMarker.remove();
+      const el=document.createElement('div');
+      el.style.cssText='width:26px;height:26px;background:#f59e0b;border-radius:50%;border:3px solid white;box-shadow:0 0 16px rgba(245,158,11,0.8);cursor:pointer;';
+      spotMarker=new maplibregl.Marker({element:el}).setLngLat([spotData.lng,spotData.lat]).addTo(map);
+      if(userPos) updateDistance();
+      else document.getElementById('spotDistance').innerHTML = '📍 Standort wird geladen ...';
+      showToast('✅ Spot gesetzt – jetzt Navigation starten');
     }
 
-    // ---------- Spot laden (echter Spot über ID) ----------
-    async function loadSpot(spotId) {
-      try {
-        const res = await fetch(`${API}/userspots/${spotId}`);
-        if (!res.ok) throw new Error('Spot nicht gefunden');
-        spotData = await res.json();
-        isDemoSpot = false;
-        let ownerName = 'Unbekannt';
-        try {
-          const pRes = await fetch(`${API}/profile/${spotData.code}?spot=caching`);
-          if (pRes.ok) {
-            const prof = await pRes.json();
-            ownerName = prof.name || spotData.code;
+    // ---------- Geolocation & Entfernung ----------
+    function requestLocation() {
+      if(!navigator.geolocation){ showToast('❌ GPS nicht verfügbar'); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos)=>{
+          userPos={lat:pos.coords.latitude, lng:pos.coords.longitude};
+          updateDistance();
+          if(map){
+            updateUserMarker();
+            if(!spotData){
+              // Kein Spot vorhanden: Karte auf Nutzer zentrieren, um einen Spot zu setzen
+              map.flyTo({center:[userPos.lng,userPos.lat], zoom:15});
+              showToast('📍 Tippe auf die Karte, um einen temporären Spot zu setzen');
+            }
           }
-        } catch {}
-        document.getElementById('spotName').textContent = esc(spotData.name);
-        document.getElementById('spotTag').textContent = spotData.wishTag || 'Treffpunkt';
-        const descEl = document.getElementById('spotDescription');
-        if (spotData.description) descEl.textContent = spotData.description;
-        else descEl.style.display = 'none';
-        document.getElementById('ownerInfo').innerHTML = `<div class="owner-avatar">${(ownerName[0] || '?').toUpperCase()}</div><span>von ${esc(ownerName)}</span>`;
-        initMap(spotData.lat, spotData.lng);
-        if (userPos) updateDistance();
-        else document.getElementById('spotDistance').innerHTML = '📍 Standort wird geladen ...';
-        await loadFavoriteStatus(spotId);
-        document.getElementById('favBtn').style.opacity = '1';
-        document.getElementById('favBtn').style.pointerEvents = 'auto';
-        return true;
-      } catch (err) {
-        console.error(err);
-        document.getElementById('infoBox').innerHTML = `<div class="error-state">❌ Spot konnte nicht geladen werden.<br>${err.message}</div>`;
-        return false;
+        },
+        (err)=>{ showToast('⚠️ Standort nicht verfügbar'); document.getElementById('spotDistance').innerHTML='📍 GPS nicht verfügbar'; },
+        {enableHighAccuracy:true, timeout:10000}
+      );
+    }
+
+    function updateDistance() {
+      if(!userPos || !spotData) return;
+      const distKm=haversineKm(userPos.lat,userPos.lng,spotData.lat,spotData.lng);
+      currentDistance=distKm*1000;
+      const formatted=formatDistance(currentDistance);
+      document.getElementById('spotDistance').innerHTML=`📍 ${formatted}`;
+      document.getElementById('distValue').textContent=formatted;
+    }
+
+    // ---------- Navigation ----------
+    async function startNavigation() {
+      if(!userPos){ showToast('📍 Standort wird benötigt'); requestLocation(); return; }
+      if(!spotData){ showToast('📍 Kein Ziel – tippe auf die Karte, um einen Spot zu setzen'); return; }
+      if(navActive){ stopNavigation(); return; }
+      navActive=true;
+      document.getElementById('navPanel').style.display='flex';
+      document.getElementById('navBtn').classList.add('active');
+      document.getElementById('navBtn').querySelector('.action-sub').textContent='Aktiv';
+      await fetchAndDrawRoute(userPos.lat,userPos.lng,spotData.lat,spotData.lng);
+      map.jumpTo({center:[userPos.lng,userPos.lat], zoom:17, pitch:50, bearing:0});
+      watchId=navigator.geolocation.watchPosition(
+        async (pos)=>{
+          userPos={lat:pos.coords.latitude,lng:pos.coords.longitude};
+          updateDistance();
+          if(userMarker) userMarker.setLngLat([userPos.lng,userPos.lat]);
+          else updateUserMarker();
+          map.jumpTo({center:[userPos.lng,userPos.lat], bearing:pos.coords.heading||0, pitch:50, zoom:17});
+          await fetchAndDrawRoute(userPos.lat,userPos.lng,spotData.lat,spotData.lng);
+        },
+        (err)=>{ showToast('GPS Signal verloren'); },
+        {enableHighAccuracy:true, maximumAge:5000, timeout:10000}
+      );
+    }
+    function stopNavigation() {
+      if(watchId) navigator.geolocation.clearWatch(watchId);
+      navActive=false;
+      document.getElementById('navPanel').style.display='none';
+      document.getElementById('navBtn').classList.remove('active');
+      document.getElementById('navBtn').querySelector('.action-sub').textContent='Live-Route';
+      clearRoutes();
+      if(userPos && spotData){
+        const bounds=new maplibregl.LngLatBounds([spotData.lng,spotData.lat],[userPos.lng,userPos.lat]);
+        map.fitBounds(bounds,{padding:60,duration:500});
       }
     }
+
+    // ---------- Funktionen für echte Spots (deaktiviert im Demo-Modus) ----------
+    async function toggleFavorite(){ if(isDemoSpot){ showToast('⭐ Demo-Spot – kein Favorit'); return; } /* API-Call */ showToast('⭐ (Demo)'); }
+    async function performCheckin(){ if(isDemoSpot){ showToast('✅ Demo: Check-in simuliert'); return; } showToast('✅ (Demo)'); }
+    function openChat(){ if(isDemoSpot){ showToast('💬 Demo: Chat simuliert'); return; } showToast('💬 (Demo)'); }
 
     // ---------- Hauptprogramm ----------
-    (async function() {
+    (async function(){
       const urlParams = new URLSearchParams(window.location.search);
       const spotId = urlParams.get('id');
-      if (!spotId) {
-        document.body.innerHTML = '<div class="loading-state">❌ Keine Spot-ID angegeben.<br>Nutze den "Demo Spot erstellen"-Button.</div>';
-        // Trotzdem Demo-Button funktionsfähig lassen
-        return;
+      if(spotId){
+        // Echten Spot laden
+        try{
+          const res=await fetch(`${API}/userspots/${spotId}`);
+          if(!res.ok) throw new Error();
+          spotData=await res.json();
+          isDemoSpot=false;
+          let ownerName='Unbekannt';
+          try{
+            const pRes=await fetch(`${API}/profile/${spotData.code}?spot=caching`);
+            if(pRes.ok){ const prof=await pRes.json(); ownerName=prof.name||spotData.code; }
+          }catch{}
+          document.getElementById('spotName').textContent=esc(spotData.name);
+          document.getElementById('spotTag').textContent=spotData.wishTag||'Treffpunkt';
+          const descEl=document.getElementById('spotDescription');
+          if(spotData.description) descEl.textContent=spotData.description;
+          else descEl.style.display='none';
+          document.getElementById('ownerInfo').innerHTML=`<div class="owner-avatar">${(ownerName[0]||'?').toUpperCase()}</div><span>von ${esc(ownerName)}</span>`;
+          document.getElementById('favBtn').style.opacity='1';
+          document.getElementById('favBtn').style.pointerEvents='auto';
+          document.getElementById('checkinBtn').style.opacity='1';
+          document.getElementById('checkinBtn').style.pointerEvents='auto';
+          document.getElementById('chatBtn').style.opacity='1';
+          document.getElementById('chatBtn').style.pointerEvents='auto';
+          initMap(spotData.lat,spotData.lng);
+          requestLocation();
+          // echte API-Funktionen wiederherstellen
+          window.toggleFavoriteReal = toggleFavorite;
+          window.performCheckinReal = performCheckin;
+          window.openChatReal = openChat;
+        }catch(e){
+          document.getElementById('infoBox').innerHTML=`<div class="error-state">❌ Spot nicht gefunden</div>`;
+          return;
+        }
+      } else {
+        // Keine ID – Demo-Modus: Karte auf aktuellen Standort, Spot durch Klick setzen
+        isDemoSpot=true;
+        document.getElementById('spotName').textContent='📍 Demo-Modus';
+        document.getElementById('spotTag').textContent='Kein Spot';
+        document.getElementById('spotDescription').innerHTML='Tippe auf die Karte, um einen temporären Spot zu setzen. Anschließend Navigation starten.';
+        document.getElementById('ownerInfo').innerHTML='<div class="owner-avatar">🧪</div><span>Temporärer Spot</span>';
+        document.getElementById('favBtn').style.opacity='0.5';
+        document.getElementById('favBtn').style.pointerEvents='none';
+        document.getElementById('checkinBtn').style.opacity='0.5';
+        document.getElementById('checkinBtn').style.pointerEvents='none';
+        document.getElementById('chatBtn').style.opacity='0.5';
+        document.getElementById('chatBtn').style.pointerEvents='none';
+        requestLocation();   // userPos setzen, Karte wird dann in initMap zentriert
+        // warte auf userPos, dann initMap
+        const waitForPos=setInterval(()=>{
+          if(userPos){
+            clearInterval(waitForPos);
+            initMap(userPos.lat, userPos.lng);
+            showToast('📍 Tippe auf die Karte, um einen Spot zu setzen');
+          }
+        },500);
       }
-      requestLocation();
-      await loadSpot(spotId);
 
-      // Event-Listener für Buttons
-      document.getElementById('favBtn').addEventListener('click', () => toggleFavorite(spotId));
-      document.getElementById('distanceBtn').addEventListener('click', () => {
-        if (userPos && spotData) updateDistance();
-        else requestLocation();
-      });
-      document.getElementById('checkinBtn').addEventListener('click', () => performCheckin(spotId));
-      document.getElementById('chatBtn').addEventListener('click', openChat);
+      // Event-Listener für Buttons (immer gültig)
+      document.getElementById('favBtn').addEventListener('click',()=>{ if(!isDemoSpot) toggleFavorite(); else showToast('⭐ Demo-Spot – kein Favorit'); });
+      document.getElementById('distanceBtn').addEventListener('click',()=>{ if(userPos && spotData) updateDistance(); else requestLocation(); });
+      document.getElementById('checkinBtn').addEventListener('click',()=>{ if(!isDemoSpot) performCheckin(); else showToast('✅ Demo: Check-in simuliert'); });
+      document.getElementById('chatBtn').addEventListener('click',()=>{ if(!isDemoSpot) openChat(); else showToast('💬 Demo: Chat simuliert'); });
       document.getElementById('navBtn').addEventListener('click', startNavigation);
-      document.getElementById('demoSpotBtn').addEventListener('click', createDemoSpot);
     })();
   </script>
 </body>
