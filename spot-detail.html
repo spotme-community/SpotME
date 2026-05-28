@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=yes">
+  <title>SpotMe · Spot-Details</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: #0a0d12;
+      color: #e2e8f0;
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      line-height: 1.4;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    /* Kartenblock – exakt 1/3 der Bildschirmhöhe */
+    .map-container {
+      position: relative;
+      height: 33vh;
+      width: 100%;
+      background: #0f1318;
+      z-index: 1;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      filter: brightness(0.85);
+    }
+    .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo {
+      display: none !important;
+    }
+
+    /* Beschreibungsblock – volle Breite, maximal 5 Zeilen */
+    .description-box {
+      background: #141a22;
+      border-radius: 28px 28px 0 0;
+      margin-top: -20px;
+      position: relative;
+      z-index: 2;
+      padding: 24px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .spot-name {
+      font-family: 'Space Mono', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      color: #f59e0b;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+    .spot-meta {
+      font-size: 14px;
+      color: #94a3b8;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .spot-tag {
+      background: rgba(245,158,11,0.12);
+      border: 1px solid rgba(245,158,11,0.3);
+      padding: 4px 12px;
+      border-radius: 40px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #f59e0b;
+    }
+    .spot-description {
+      font-size: 17px;
+      line-height: 1.45;
+      color: #cbd5e1;
+      max-height: calc(1.45em * 5);
+      overflow-y: auto;
+      margin-top: 10px;
+      padding-right: 6px;
+    }
+    .spot-description:empty {
+      display: none;
+    }
+    .spot-owner {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .owner-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 28px;
+      background: #f59e0b;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0a0d12;
+    }
+
+    /* 4 große Aktions-Buttons */
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding: 24px 20px 32px;
+      background: #0a0d12;
+    }
+    .action-btn {
+      background: #141a22;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 28px;
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 700;
+      color: #e2e8f0;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+    .action-btn:active {
+      transform: scale(0.97);
+      background: #1a2230;
+    }
+    .action-icon {
+      font-size: 32px;
+    }
+    .action-label {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .action-sub {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    /* spezielle Farben */
+    .btn-fav.active {
+      background: rgba(245,158,11,0.15);
+      border-color: #f59e0b;
+      color: #f59e0b;
+    }
+    .btn-checkin {
+      background: rgba(16,185,129,0.12);
+      border-color: rgba(16,185,129,0.3);
+    }
+    .btn-checkin:active {
+      background: rgba(16,185,129,0.25);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(20,26,34,0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 60px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.2,0.9,0.4,1.1);
+      white-space: nowrap;
+      color: #e2e8f0;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Back-Link (optional) */
+    .back-link {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      background: rgba(15,19,24,0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 40px;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #e2e8f0;
+      text-decoration: none;
+      z-index: 20;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .back-link:active {
+      background: #f59e0b;
+      color: #0a0d12;
+    }
+
+    /* Loading / Error Zustand */
+    .loading-state {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-size: 18px;
+      color: #94a3b8;
+    }
+    .error-state {
+      text-align: center;
+      padding: 40px;
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back-link">← Zurück</a>
+  <div class="map-container">
+    <div id="map"></div>
+  </div>
+  <div class="description-box" id="infoBox">
+    <div class="spot-name" id="spotName">—</div>
+    <div class="spot-meta">
+      <span class="spot-tag" id="spotTag">—</span>
+      <span id="spotDistance" style="color:#22d3ee;">📍 Entfernung wird berechnet</span>
+    </div>
+    <div class="spot-description" id="spotDescription"></div>
+    <div class="spot-owner" id="ownerInfo"></div>
+  </div>
+
+  <div class="action-grid">
+    <div class="action-btn btn-fav" id="favBtn">
+      <div class="action-icon">☆</div>
+      <div class="action-label">Favorit</div>
+      <div class="action-sub" id="favSub">speichern</div>
+    </div>
+    <div class="action-btn" id="distanceBtn">
+      <div class="action-icon">📍</div>
+      <div class="action-label">Entfernung</div>
+      <div class="action-sub" id="distValue">— km</div>
+    </div>
+    <div class="action-btn btn-checkin" id="checkinBtn">
+      <div class="action-icon">✅</div>
+      <div class="action-label">Check‑in</div>
+      <div class="action-sub">Jetzt da sein</div>
+    </div>
+    <div class="action-btn" id="chatBtn">
+      <div class="action-icon">💬</div>
+      <div class="action-label">Chat</div>
+      <div class="action-sub">mit Besitzer</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
+  <script>
+    'use strict';
+
+    // ---------- Globale Variablen ----------
+    const API = 'https://spotme-chat-obom.onrender.com/api';
+    let CODE = localStorage.getItem('sm_code') || '000000';
+    let spotData = null;
+    let map = null;
+    let userMarker = null;
+    let spotMarker = null;
+    let userPos = null;
+    let favoritesCache = new Set();
+    let currentDistance = null; // in Metern
+
+    // ---------- Hilfsfunktionen ----------
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2800);
+    }
+
+    function esc(s) {
+      const div = document.createElement('div');
+      div.textContent = String(s || '');
+      return div.innerHTML;
+    }
+
+    function haversineKm(lat1, lng1, lat2, lng2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function formatDistance(meters) {
+      if (meters < 1000) return `${Math.round(meters)} m`;
+      return `${(meters / 1000).toFixed(1)} km`;
+    }
+
+    // ---------- Karte initialisieren ----------
+    function initMap(lat, lng) {
+      if (map) map.remove();
+      map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/bright',
+        center: [lng, lat],
+        zoom: 14,
+        attributionControl: false
+      });
+
+      map.on('load', () => {
+        // Spot-Marker
+        const el = document.createElement('div');
+        el.className = 'my-spot-marker'; // verwende vorhandenes CSS
+        el.style.cssText = 'width:26px;height:26px;background:#f59e0b;border-radius:50%;border:3px solid white;box-shadow:0 0 16px rgba(245,158,11,0.8);cursor:pointer;';
+        spotMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map);
+        
+        if (userPos) {
+          const uel = document.createElement('div');
+          uel.className = 'user-marker';
+          uel.style.cssText = 'width:18px;height:18px;background:#22d3ee;border-radius:50%;border:2px solid white;box-shadow:0 0 8px rgba(34,211,238,0.8);';
+          userMarker = new maplibregl.Marker({ element: uel }).setLngLat([userPos.lng, userPos.lat]).addTo(map);
+          // Bounds auf Spot und Nutzer
+          const bounds = new maplibregl.LngLatBounds([lng, lat], [userPos.lng, userPos.lat]);
+          map.fitBounds(bounds, { padding: 60, duration: 500 });
+        } else {
+          map.setCenter([lng, lat]);
+          map.setZoom(14);
+        }
+      });
+    }
+
+    // ---------- Spotdaten von API laden ----------
+    async function loadSpot(spotId) {
+      try {
+        const res = await fetch(`${API}/userspots/${spotId}`);
+        if (!res.ok) throw new Error('Spot nicht gefunden');
+        spotData = await res.json();
+        // Falls Code des Besitzers nicht im Spot-Objekt ist, muss er separat geladen werden (normalerweise enthalten)
+        if (!spotData.code) {
+          // Fallback: Besitzer über andere API ermitteln (nicht notwendig, da /userspots/:id code liefert)
+        }
+        // Profil des Besitzers laden für Namen
+        let ownerName = 'Unbekannt';
+        try {
+          const pRes = await fetch(`${API}/profile/${spotData.code}?spot=caching`);
+          if (pRes.ok) {
+            const prof = await pRes.json();
+            ownerName = prof.name || spotData.code;
+          }
+        } catch {}
+        // UI befüllen
+        document.getElementById('spotName').textContent = esc(spotData.name);
+        document.getElementById('spotTag').textContent = spotData.wishTag || 'Treffpunkt';
+        const descEl = document.getElementById('spotDescription');
+        if (spotData.description) {
+          descEl.textContent = spotData.description;
+        } else {
+          descEl.style.display = 'none';
+        }
+        document.getElementById('ownerInfo').innerHTML = `
+          <div class="owner-avatar">${(ownerName[0] || '?').toUpperCase()}</div>
+          <span>von ${esc(ownerName)}</span>
+        `;
+        // Karte initialisieren
+        initMap(spotData.lat, spotData.lng);
+        // Entfernung berechnen falls Standort bekannt
+        if (userPos) {
+          updateDistance();
+        } else {
+          document.getElementById('spotDistance').innerHTML = '📍 Standort wird geladen ...';
+        }
+        // Favoriten-Status laden
+        await loadFavoriteStatus(spotId);
+        return true;
+      } catch (err) {
+        console.error(err);
+        document.getElementById('infoBox').innerHTML = `<div class="error-state">❌ Spot konnte nicht geladen werden.<br>${err.message}</div>`;
+        return false;
+      }
+    }
+
+    // ---------- Entfernung aktualisieren ----------
+    function updateDistance() {
+      if (!userPos || !spotData) return;
+      const distanceKm = haversineKm(userPos.lat, userPos.lng, spotData.lat, spotData.lng);
+      const distanceMeters = distanceKm * 1000;
+      currentDistance = distanceMeters;
+      const formatted = formatDistance(distanceMeters);
+      document.getElementById('spotDistance').innerHTML = `📍 ${formatted}`;
+      document.getElementById('distValue').textContent = formatted;
+    }
+
+    // ---------- Geolocation ----------
+    function requestLocation() {
+      if (!navigator.geolocation) {
+        showToast('❌ GPS nicht verfügbar');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          updateDistance();
+          if (map && spotData) {
+            if (userMarker) userMarker.remove();
+            const uel = document.createElement('div');
+            uel.className = 'user-marker';
+            uel.style.cssText = 'width:18px;height:18px;background:#22d3ee;border-radius:50%;border:2px solid white;box-shadow:0 0 8px rgba(34,211,238,0.8);';
+            userMarker = new maplibregl.Marker({ element: uel }).setLngLat([userPos.lng, userPos.lat]).addTo(map);
+            const bounds = new maplibregl.LngLatBounds([spotData.lng, spotData.lat], [userPos.lng, userPos.lat]);
+            map.fitBounds(bounds, { padding: 60 });
+          }
+        },
+        (err) => {
+          console.warn(err);
+          showToast('⚠️ Standort nicht verfügbar, Entfernung wird nicht angezeigt');
+          document.getElementById('spotDistance').innerHTML = '📍 GPS nicht verfügbar';
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    // ---------- Favoriten-Logik ----------
+    async function loadFavoriteStatus(spotId) {
+      try {
+        const r = await fetch(`${API}/favorites/${CODE}`);
+        if (r.ok) {
+          const favs = await r.json();
+          favoritesCache.clear();
+          favs.forEach(f => favoritesCache.add(String(f.spot_id)));
+          updateFavButton(spotId);
+        }
+      } catch {}
+    }
+
+    function updateFavButton(spotId) {
+      const isFav = favoritesCache.has(String(spotId));
+      const btn = document.getElementById('favBtn');
+      const iconDiv = btn.querySelector('.action-icon');
+      const label = btn.querySelector('.action-label');
+      const sub = btn.querySelector('.action-sub');
+      if (isFav) {
+        iconDiv.textContent = '⭐';
+        label.textContent = 'Favorit';
+        sub.textContent = 'gespeichert';
+        btn.classList.add('active');
+      } else {
+        iconDiv.textContent = '☆';
+        label.textContent = 'Favorit';
+        sub.textContent = 'speichern';
+        btn.classList.remove('active');
+      }
+    }
+
+    async function toggleFavorite(spotId) {
+      const isFav = favoritesCache.has(String(spotId));
+      try {
+        if (isFav) {
+          await fetch(`${API}/favorites/${spotId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: CODE })
+          });
+          favoritesCache.delete(String(spotId));
+          showToast('⭐ Aus Favoriten entfernt');
+        } else {
+          await fetch(`${API}/favorites`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: CODE, spot_id: spotId })
+          });
+          favoritesCache.add(String(spotId));
+          showToast('⭐ Favorit gespeichert');
+        }
+        updateFavButton(spotId);
+      } catch (err) {
+        showToast('⚠️ Fehler beim Speichern');
+      }
+    }
+
+    // ---------- Check-in (öffentlich, sofort) ----------
+    async function performCheckin(spotId) {
+      if (!userPos) {
+        showToast('📍 Standort wird benötigt. Bitte GPS aktivieren.', true);
+        requestLocation();
+        return;
+      }
+      // Prüfen: Standort sollte nah am Spot sein? Optional. Wir erlauben es erstmal.
+      try {
+        const res = await fetch(`${API}/checkins/public`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: CODE,
+            spot_id: spotId,
+            checkin_at: Date.now(),
+            note: 'Jetzt da!'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('✅ Check-in erfolgreich! Andere sehen deinen Besuch.');
+          // Eventuell Button kurz deaktivieren, aber nicht nötig
+        } else {
+          showToast('⚠️ ' + (data.error || 'Check-in fehlgeschlagen'));
+        }
+      } catch {
+        showToast('⚠️ Server nicht erreichbar');
+      }
+    }
+
+    // ---------- Chat öffnen (weiterleitung zu index.html mit Parameter) ----------
+    function openChat(ownerCode, ownerName) {
+      // Wir leiten zur Hauptseite weiter mit einem speziellen Parameter
+      // Die index.html könnte diesen Parameter auswerten und direkt den Chat-Drawer öffnen.
+      // Falls nicht implementiert, landet der Nutzer zumindest auf der Karte.
+      window.location.href = `/index.html?openChat=${ownerCode}&chatName=${encodeURIComponent(ownerName)}`;
+    }
+
+    // ---------- Entfernungs-Button aktualisiert nur die Anzeige ----------
+    function refreshDistance() {
+      if (userPos && spotData) {
+        updateDistance();
+        showToast(`📍 ${formatDistance(currentDistance)} vom Spot entfernt`);
+      } else {
+        requestLocation();
+      }
+    }
+
+    // ---------- Hauptprogramm ----------
+    (async function() {
+      // URL-Parameter auslesen
+      const urlParams = new URLSearchParams(window.location.search);
+      const spotId = urlParams.get('id');
+      if (!spotId) {
+        document.body.innerHTML = '<div class="loading-state">❌ Keine Spot-ID angegeben.</div>';
+        return;
+      }
+
+      // Standort anfordern (parallel)
+      requestLocation();
+
+      const success = await loadSpot(spotId);
+      if (!success) return;
+
+      // Event-Listener für Buttons
+      document.getElementById('favBtn').addEventListener('click', () => toggleFavorite(spotId));
+      document.getElementById('distanceBtn').addEventListener('click', refreshDistance);
+      document.getElementById('checkinBtn').addEventListener('click', () => performCheckin(spotId));
+      document.getElementById('chatBtn').addEventListener('click', () => {
+        if (spotData && spotData.code) {
+          // Besitzer-Namen haben wir bereits in ownerInfo, aber wir können ihn nochmal laden
+          let ownerName = spotData.code;
+          // Versuchen Namen aus dem DOM zu holen
+          const ownerSpan = document.querySelector('.spot-owner span');
+          if (ownerSpan) ownerName = ownerSpan.textContent.replace('von ', '');
+          openChat(spotData.code, ownerName);
+        } else {
+          showToast('⚠️ Besitzer nicht gefunden');
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
