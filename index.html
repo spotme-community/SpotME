@@ -564,6 +564,9 @@
   <div class="stat-pill">INVITES <span class="val" id="statInvites">0</span></div>
 </div>
 
+<!-- Kategorie-Filter – wird dynamisch aus allSpots befüllt -->
+<div class="filter-strip" id="filterStrip" style="display:none;"></div>
+
 <div class="fab-wrap">
   <button class="fab" id="fabBtn" onclick="togglePlaceMode()">📍</button>
   <span class="fab-label" id="fabLabel">SPOT</span>
@@ -734,6 +737,8 @@ let toastTimer, currentDrawer = null;
 let activeRadius = null, detailSpot = null, detailMiniMap = null;
 let spotPhotoData = null;
 let editSpotId    = null;
+// Aktuell gewählte Kategorie – null bedeutet "Alle"
+let activeFilter  = null;
 
 // IndexedDB Wrapper Start
 
@@ -969,6 +974,96 @@ async function loadAllSpots() {
 //  await renderMarkers();
 //}
 
+// ── KATEGORIE-FILTER ─────────────────────────────────────────────────────────
+// Emoji-Mapping für die Kategorie-Pills – gleiche Icons wie in spot-erstellen.html
+const CATEGORY_EMOJI = {
+  'Bahnhof':          '🚉',
+  'Club':             '🎉',
+  'Einkaufsviertel':  '🛍️',
+  'Filmtheater':      '🎬',
+  'Fitnesscenter':    '💪',
+  'Industriepark':    '🏭',
+  'Internetcafé':     '💻',
+  'Naturschutzgebiet':'🌿',
+  'Park':             '🌳',
+  'Rastplatz':        '🛣️',
+  'Restaurant':       '🍽️',
+  'Sauna':            '🧖',
+  'Strand':           '🏖️',
+  'Sonstiges':        '📌',
+};
+
+// Baut die Filter-Leiste aus den aktuell vorhandenen Kategorien in allSpots.
+// Nur Kategorien die wirklich vorkommen werden als Pill angezeigt –
+// keine leeren Filter für Kategorien ohne Spots.
+function buildFilterStrip() {
+  const strip = document.getElementById('filterStrip');
+  if (!strip) return;
+
+  // Alle vorhandenen Kategorien sammeln und zählen
+  const counts = {};
+  allSpots.forEach(s => {
+    if (s.area_type) {
+      counts[s.area_type] = (counts[s.area_type] || 0) + 1;
+    }
+  });
+
+  const categories = Object.keys(counts);
+
+  // Filter-Leiste nur anzeigen wenn mindestens eine Kategorie vorhanden ist
+  if (!categories.length) {
+    strip.style.display = 'none';
+    return;
+  }
+
+  strip.style.display = 'flex';
+
+  // "Alle"-Pill zählt alle Spots (auch die ohne Kategorie)
+  const allCount = allSpots.length;
+  strip.innerHTML = `
+    <div class="filter-pill all-pill ${activeFilter === null ? 'active' : ''}"
+         data-cat="">
+      Alle <span class="pill-count">${allCount}</span>
+    </div>
+    ${categories.sort().map(cat => `
+      <div class="filter-pill ${activeFilter === cat ? 'active' : ''}"
+           data-cat="${cat}">
+        ${CATEGORY_EMOJI[cat] || '📌'} ${cat}
+        <span class="pill-count">${counts[cat]}</span>
+      </div>
+    `).join('')}`;
+
+  // Klick-Handler für jede Pill
+  strip.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const cat = pill.dataset.cat || null;
+      activeFilter = cat === '' ? null : cat;
+      buildFilterStrip();   // Leiste neu rendern (active-Klasse aktualisieren)
+      applyFilter();         // Marker auf der Karte filtern
+    });
+  });
+}
+
+// Zeigt oder versteckt Marker basierend auf activeFilter.
+// Wir entfernen keine Marker – wir setzen nur display:none auf das Element.
+// Das ist effizienter als Marker zu löschen und neu zu erstellen.
+function applyFilter() {
+  allSpots.forEach((s, i) => {
+    const marker = markers[i];
+    if (!marker) return;
+    const el = marker.getElement();
+    if (!el) return;
+
+    // Spot anzeigen wenn: kein Filter aktiv, oder Kategorie stimmt überein,
+    // oder eigener Spot (eigene Spots immer anzeigen)
+    const show = activeFilter === null
+      || s.code === CODE
+      || s.area_type === activeFilter;
+
+    el.style.display = show ? '' : 'none';
+  });
+}
+
 async function renderMarkers() {
   markers.forEach(m => m.remove());
   markers = [];
@@ -989,6 +1084,10 @@ async function renderMarkers() {
     markers.push(marker);
     el.addEventListener('click', e => { e.stopPropagation(); openMarkerDrawer(s,isMine,isOnline); });
   });
+
+  // Filter-Leiste aktualisieren und aktiven Filter anwenden
+  buildFilterStrip();
+  applyFilter();
 }
 
 function openMarkerDrawer(s, isMine, isOnline) {

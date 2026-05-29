@@ -1627,7 +1627,7 @@ app.get('/api/userspots/all', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT id, code, lat, lng, name, description, wish_tag AS "wishTag",
               ${noImage ? 'NULL AS image' : 'CASE WHEN image_status = \'approved\' THEN image ELSE NULL END AS image'},
-              active, created_at
+              active, area_type, time_pref, crowd_level, intimacy_level, created_at
        FROM user_spots
        WHERE active = true
        ORDER BY created_at DESC`
