@@ -693,7 +693,8 @@
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">🔍 Radius-Suche</div>
-    <p style="font-size:0.82rem;color:var(--muted2);margin-bottom:1rem;">Spots anderer Profile in deiner Umgebung.</p>
+    <p style="font-size:0.82rem;color:var(--muted2);margin-bottom:0.6rem;">Spots anderer Profile in deiner Umgebung.</p>
+    <div id="radiusFilterHint" style="display:none;font-size:0.75rem;padding:0.4rem 0.75rem;border-radius:8px;background:var(--acc-dim);border:1px solid var(--acc-glow);color:var(--acc);margin-bottom:0.75rem;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.8rem;">
       <button class="radius-choice" id="rc2">2 km</button>
       <button class="radius-choice" id="rc5">5 km</button>
@@ -3263,6 +3264,19 @@ function openRadiusSearch() {
   document.querySelectorAll('.radius-choice').forEach(b=>b.classList.remove('selected'));
   if (activeRadius) document.getElementById(`rc${activeRadius}`)?.classList.add('selected');
   document.getElementById('radiusResult').textContent=activeRadius?`Aktiver Radius: ${activeRadius} km`:'';
+
+  // Aktiven Kategorie-Filter im Modal anzeigen – so sieht der Nutzer sofort,
+  // dass die Radius-Suche auf diese Kategorie eingeschränkt wird.
+  const hint=document.getElementById('radiusFilterHint');
+  if (hint) {
+    if (activeFilter) {
+      hint.textContent=`🔎 Kategorie-Filter: ${CATEGORY_EMOJI[activeFilter]||'📌'} ${activeFilter}`;
+      hint.style.display='block';
+    } else {
+      hint.style.display='none';
+    }
+  }
+
   document.getElementById('radiusModal').classList.add('show');
 }
 
@@ -3290,10 +3304,18 @@ function selectRadius(km) {
   const bounds=new maplibregl.LngLatBounds(); coords.forEach(c=>bounds.extend(c));
   map.fitBounds(bounds,{padding:20});
 
-  const nearby=allSpots.filter(s=>s.code!==CODE&&haversineKm(userPos.lat,userPos.lng,s.lat,s.lng)<=km);
-  document.getElementById('radiusResult').textContent=`${nearby.length} Spot${nearby.length!==1?'s':''} innerhalb ${km} km`;
+  // Kombinierter Filter: Umkreis UND aktiver Kategorie-Filter (falls gesetzt)
+  const nearby=allSpots.filter(s=>
+    s.code!==CODE &&
+    haversineKm(userPos.lat,userPos.lng,s.lat,s.lng)<=km &&
+    (activeFilter===null||s.area_type===activeFilter)
+  );
+  const catSuffix=activeFilter?` · ${CATEGORY_EMOJI[activeFilter]||'📌'} ${activeFilter}`:'';
+  document.getElementById('radiusResult').textContent=
+    `${nearby.length} Spot${nearby.length!==1?'s':''} innerhalb ${km} km${catSuffix}`;
   document.getElementById('radiusBtn').classList.add('active');
-  if (nearby.length>0) setTimeout(()=>{closeModals();openDrawerFiltered(nearby,km);},600);
+  // Drawer immer öffnen – auch bei 0 Ergebnissen zeigt openDrawerFiltered einen leeren Zustand
+  setTimeout(()=>{closeModals();openDrawerFiltered(nearby,km);},600);
 }
 
 function clearRadius() {
@@ -3307,9 +3329,19 @@ function clearRadius() {
 function openDrawerFiltered(spots,km) {
   document.getElementById('drawerOverlay').classList.add('show');
   document.getElementById('drawer').classList.add('open');
-  document.getElementById('drawerTitle').textContent=`RADIUS ${km} KM`;
+  // Titel zeigt Radius UND aktiven Kategorie-Filter
+  const catSuffix=activeFilter?` · ${CATEGORY_EMOJI[activeFilter]||'📌'} ${activeFilter}`:'';
+  document.getElementById('drawerTitle').textContent=`RADIUS ${km} KM${catSuffix}`;
   currentDrawer='radius';
   const body=document.getElementById('drawerBody');
+
+  // Leerer Zustand: Kategorie-Hinweis damit der Nutzer weiß warum nichts gefunden wurde
+  if (!spots.length) {
+    const catNote=activeFilter?` in der Kategorie „${activeFilter}"`:'';
+    body.innerHTML=`<div class="empty-state"><div class="es-icon">🔍</div>Keine Spots${catNote} innerhalb ${km} km.</div>`;
+    return;
+  }
+
   body.innerHTML=spots.map(s=>{
     const dist=haversineKm(userPos.lat,userPos.lng,s.lat,s.lng);
     return `<div class="spot-card">
